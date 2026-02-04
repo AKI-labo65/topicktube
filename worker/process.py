@@ -30,7 +30,7 @@ from app.tasks import set_job_status, set_video_status, store_clustered_results 
 
 from .youtube import fetch_comments, fetch_video_info  # noqa: E402
 from .clustering import embed_comments, cluster_comments, select_representatives, preprocess_texts  # noqa: E402
-from .summarize import summarize_cluster  # noqa: E402
+from .summarize import summarize_cluster, summarize_overall  # noqa: E402
 
 
 def calc_comments_hash(comment_ids: list[str]) -> str:
@@ -150,6 +150,26 @@ def process_video(video_id: int, youtube_url: str):
                 final_cluster_labels,
                 cluster_summaries
             )
+
+            # 6. Generate overall summary from cluster data
+            print(f"[worker] Generating overall summary...")
+            clusters_data = []
+            for i in range(len(rep_indices_map)):
+                cluster_size = sum(1 for l in labels if l == i)
+                clusters_data.append({
+                    "label": final_cluster_labels[i],
+                    "summary": cluster_summaries[i],
+                    "size": cluster_size,
+                })
+            
+            overall_summary = summarize_overall(clusters_data, video_title=video_title)
+            
+            # Save to video
+            video = db.query(Video).filter(Video.id == video_id).first()
+            if video:
+                video.overall_summary = overall_summary
+                db.commit()
+                print(f"[worker] Overall summary saved")
 
     except Exception as exc:  # pylint: disable=broad-except
         print(f"[worker] Error processing video: {exc}")

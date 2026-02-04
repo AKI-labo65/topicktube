@@ -33,6 +33,7 @@ class VideoResponse(BaseModel):
     id: int
     youtube_id: str
     title: Optional[str] = None
+    overall_summary: Optional[str] = None
     status: StatusEnum
     created_at: datetime
     updated_at: datetime

@@ -16,6 +16,7 @@ type Video = {
   id: number;
   youtube_id: string;
   title?: string;
+  overall_summary?: string;
   status: string;
   clusters: Cluster[];
 };
@@ -200,6 +201,35 @@ export default function VideoPage() {
           </div>
         </div>
       </div>
+
+      {/* Overall Summary Card */}
+      {video.overall_summary && (
+        <div
+          className="card"
+          style={{
+            marginTop: 16,
+            background: "linear-gradient(135deg, #fef3c7 0%, #fff7ed 100%)",
+            borderLeft: "4px solid #f59e0b",
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: 16 }}>📊 コメントの要点</h3>
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 14,
+              lineHeight: 1.7,
+              color: "#1e293b",
+              whiteSpace: "pre-wrap",
+            }}
+            dangerouslySetInnerHTML={{
+              __html: video.overall_summary
+                .replace(/^## /gm, '<strong style="display:block;margin-top:12px;margin-bottom:4px;">')
+                .replace(/\n(?=- )/g, '</strong>\n')
+                .replace(/^- /gm, '• ')
+            }}
+          />
+        </div>
+      )}
 
       {/* Map Section */}
       <div className="card" style={{ marginTop: 16 }}>

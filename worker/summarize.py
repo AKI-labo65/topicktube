@@ -98,3 +98,71 @@ SUMMARY: <2〜3文の要約>
     except Exception as e:
         print(f"[summarize] Error generating summary: {e}")
         return "論点（生成エラー）", "要約の生成に失敗しました。"
+
+
+def summarize_overall(
+    clusters_data: List[dict],
+    video_title: str | None = None,
+) -> str:
+    """
+    Generate an overall summary from all cluster labels and summaries.
+
+    Args:
+        clusters_data: List of dicts with 'label', 'summary', 'size' keys
+        video_title: Title of the video (optional context)
+
+    Returns:
+        Overall summary as markdown-formatted string with key points
+    """
+    if not clusters_data:
+        return "クラスタが見つかりませんでした。"
+
+    client = get_client()
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+    # Format cluster info
+    cluster_info = "\n".join([
+        f"- {c['label']} ({c['size']}件): {c['summary']}"
+        for c in clusters_data
+    ])
+
+    system = (
+        "あなたはYouTube動画のコメント分析結果を要約するアナリストです。"
+        "各クラスタの論点を統合し、視聴者の反応の全体像を簡潔にまとめてください。"
+        "具体的な意見内容を含め、読者がすぐに理解できる形にしてください。"
+    )
+
+    user = f"""
+動画タイトル: {video_title or "不明"}
+
+コメントクラスタの分析結果:
+{cluster_info}
+
+以下の形式で出力してください:
+
+## コメントの要点
+- 要点1（具体的な内容）
+- 要点2（具体的な内容）
+- 要点3（具体的な内容）
+
+## 論点の傾向
+（賛成/反対/中立の傾向や、特に多い意見について1〜2文で）
+""".strip()
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.3,
+            max_tokens=500,
+        )
+
+        result = resp.choices[0].message.content or ""
+        return result.strip()
+
+    except Exception as e:
+        print(f"[summarize] Error generating overall summary: {e}")
+        return "全体要約の生成に失敗しました。"
