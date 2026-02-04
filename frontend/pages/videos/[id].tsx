@@ -122,33 +122,72 @@ export default function VideoPage() {
           onMouseMove={handleMouseMove}
         >
           {video.clusters.map((c, index) => (
-            <div
+            <button
               key={c.id}
-              style={mapPointStyle(c, index)}
+              type="button"
+              aria-label={`${c.label}: ${c.size}コメント`}
+              style={{
+                ...mapPointStyle(c, index),
+                border: "none",
+                outline: "none",
+              }}
               onMouseEnter={() => setHoveredCluster(c)}
               onMouseLeave={() => setHoveredCluster(null)}
+              onFocus={() => setHoveredCluster(c)}
+              onBlur={() => setHoveredCluster(null)}
               onClick={() => handlePointClick(c)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  handlePointClick(c);
+                }
+              }}
             />
           ))}
         </div>
       </div>
 
-      {/* Tooltip */}
+      {/* Tooltip with edge detection */}
       {hoveredCluster && (
         <div
-          style={{
-            position: "fixed",
-            left: mousePos.x + 16,
-            top: mousePos.y + 16,
-            background: "#1e293b",
-            color: "#fff",
-            padding: "12px 16px",
-            borderRadius: 10,
-            maxWidth: 280,
-            zIndex: 1000,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-            pointerEvents: "none",
-          }}
+          style={(() => {
+            const tooltipWidth = 280;
+            const tooltipHeight = 120;
+            const margin = 16;
+            const windowWidth = typeof window !== 'undefined' ? window.innerWidth : 1000;
+            const windowHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+
+            // Calculate position with edge detection
+            let left = mousePos.x + margin;
+            let top = mousePos.y + margin;
+
+            // Flip horizontally if too close to right edge
+            if (mousePos.x + tooltipWidth + margin > windowWidth) {
+              left = mousePos.x - tooltipWidth - margin;
+            }
+
+            // Flip vertically if too close to bottom edge
+            if (mousePos.y + tooltipHeight + margin > windowHeight) {
+              top = mousePos.y - tooltipHeight - margin;
+            }
+
+            // Ensure minimum boundaries
+            left = Math.max(8, left);
+            top = Math.max(8, top);
+
+            return {
+              position: "fixed" as const,
+              left,
+              top,
+              background: "#1e293b",
+              color: "#fff",
+              padding: "12px 16px",
+              borderRadius: 10,
+              maxWidth: tooltipWidth,
+              zIndex: 1000,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+              pointerEvents: "none" as const,
+            };
+          })()}
         >
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>
             {hoveredCluster.label}
