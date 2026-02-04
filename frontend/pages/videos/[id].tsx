@@ -53,6 +53,22 @@ export default function VideoPage() {
       .catch(() => setError("動画データの取得に失敗しました"));
   }, [id]);
 
+  // Add keyframes for entrance animation
+  useEffect(() => {
+    const styleSheet = document.createElement("style");
+    styleSheet.innerText = `
+      @keyframes popIn {
+        0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+        60% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+        100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(styleSheet);
+    return () => {
+      document.head.removeChild(styleSheet);
+    };
+  }, []);
+
   const getClusterColor = (c: Cluster, index: number) => {
     if (c.stance && STANCE_COLORS[c.stance]) {
       return STANCE_COLORS[c.stance];
@@ -76,11 +92,16 @@ export default function VideoPage() {
       borderRadius: "50%",
       background: getClusterColor(c, index),
       opacity: isHovered || isHighlighted ? 1 : 0.85,
+      // Use animation for entrance, transition for hover/highlight
+      animation: `popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) ${index * 0.05}s both`,
       transform: `translate(-50%, -50%) scale(${isHovered ? 1.3 : 1})`,
       cursor: "pointer",
-      transition: "all 0.2s ease",
-      boxShadow: isHovered || isHighlighted ? "0 4px 12px rgba(0,0,0,0.3)" : "none",
-      border: isHighlighted ? "3px solid #fff" : "none",
+      transition: "transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease",
+      boxShadow: isHighlighted
+        ? `0 0 0 4px white, 0 0 0 7px ${getClusterColor(c, index)}`
+        : (isHovered ? "0 4px 12px rgba(0,0,0,0.3)" : "none"),
+      border: "3px solid #fff", // Always show white border for better contrast
+      zIndex: isHovered || isHighlighted ? 10 : 1,
     };
   };
 
