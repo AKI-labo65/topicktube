@@ -79,7 +79,8 @@ export default function VideoPage() {
   const mapPointStyle = (c: Cluster, index: number) => {
     const x = ((c.ord_x + 1) / 2) * 100;
     const y = (1 - (c.ord_y + 1) / 2) * 100;
-    const size = 14 + c.size * 1.5;
+    // Scale size based on square root of comment count for better visual balance
+    const size = 20 + Math.sqrt(c.size) * 5;
     const isHovered = hoveredCluster?.id === c.id;
     const isHighlighted = highlightedId === c.id;
 
@@ -316,9 +317,14 @@ export default function VideoPage() {
 
       {/* Map Section */}
       <div className="card" style={{ marginTop: 16 }}>
-        <h3>💬 意見マップ</h3>
-        <p style={{ color: "#64748b", fontSize: 14, marginTop: -4 }}>
-          点をホバーで詳細表示、クリックでカードへジャンプ
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+          <h3 style={{ margin: 0 }}>💬 意見マップ</h3>
+          <div style={{ fontSize: 13, color: "#64748b" }}>
+            <span style={{ fontWeight: 600, color: "#1e293b" }}>{video.clusters.reduce((sum, c) => sum + c.size, 0)}</span>件のコメント / 全<span style={{ fontWeight: 600, color: "#1e293b" }}>{video.clusters.length}</span>グループ
+          </div>
+        </div>
+        <p style={{ color: "#64748b", fontSize: 13, marginTop: 0 }}>
+          点が近いほど意見の内容が似ています。点の大きさはコメント数を表します。
         </p>
         <div
           style={{
@@ -331,6 +337,33 @@ export default function VideoPage() {
           }}
           onMouseMove={handleMouseMove}
         >
+          {/* Legend */}
+          <div style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            background: "rgba(255, 255, 255, 0.9)",
+            padding: "8px 12px",
+            borderRadius: 8,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+            fontSize: 11,
+            color: "#475569",
+            zIndex: 5,
+            pointerEvents: "none",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: STANCE_COLORS.support }}></div>
+              肯定的
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: STANCE_COLORS.neutral }}></div>
+              中立/他
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: STANCE_COLORS.skeptic }}></div>
+              懐疑的
+            </div>
+          </div>
           {video.clusters.map((c, index) => (
             <button
               key={c.id}
