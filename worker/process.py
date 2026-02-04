@@ -29,7 +29,7 @@ from app.models import Cluster, Comment, StatusEnum, Video  # type: ignore  # no
 from app.tasks import set_job_status, set_video_status, store_clustered_results  # type: ignore  # noqa: E402
 
 from .youtube import fetch_comments, fetch_video_info  # noqa: E402
-from .clustering import embed_comments, cluster_comments, select_representatives  # noqa: E402
+from .clustering import embed_comments, cluster_comments, select_representatives, preprocess_texts  # noqa: E402
 from .summarize import summarize_cluster  # noqa: E402
 
 
@@ -100,24 +100,34 @@ def process_video(video_id: int, youtube_url: str):
             set_job_status(db, job_id, StatusEnum.done, error_message="Not enough comments")
             set_video_status(db, video_id, StatusEnum.done)
         else:
-            # 2. Embed & Cluster
-            print(f"[worker] Embedding {len(texts)} comments...")
-            embeddings = embed_comments(texts)
+            # 2. Preprocess: remove noise
+            clean_texts, clean_indices = preprocess_texts(texts)
+            print(f"[worker] Preprocessed: {len(texts)} -> {len(clean_texts)} comments (noise removed)")
+            
+            if len(clean_texts) < 3:
+                print(f"[worker] Only {len(clean_texts)} clean comments, skipping analysis")
+                set_job_status(db, job_id, StatusEnum.done, error_message="Not enough valid comments")
+                set_video_status(db, video_id, StatusEnum.done)
+                return
+            
+            # 3. Embed & Cluster (using clean texts)
+            print(f"[worker] Embedding {len(clean_texts)} comments...")
+            embeddings = embed_comments(clean_texts)
 
-            print(f"[worker] Clustering...")
+            print(f"[worker] Clustering with Silhouette method...")
             labels, coords_2d, centroids = cluster_comments(embeddings)
 
-            # Select representatives
-            rep_indices_map = select_representatives(texts, embeddings, labels, centroids, top_k=5)
+            # Select representatives (indices are relative to clean_texts)
+            rep_indices_map = select_representatives(clean_texts, embeddings, labels, centroids, top_k=5)
             
-            # 3. Summarize with LLM
+            # 4. Summarize with LLM
             print(f"[worker] Summarizing {len(rep_indices_map)} clusters with LLM...")
             final_cluster_labels = []
             cluster_summaries = []
             
             for i in range(len(rep_indices_map)):
                 rep_indices = rep_indices_map[i]
-                rep_texts = [texts[idx] for idx in rep_indices]
+                rep_texts = [clean_texts[idx] for idx in rep_indices]
                 
                 if not rep_texts:
                     label, summary = f"Group {i+1}", "No content"
@@ -128,12 +138,12 @@ def process_video(video_id: int, youtube_url: str):
                 final_cluster_labels.append(label)
                 cluster_summaries.append(summary)
 
-            # 4. Store Results
+            # 5. Store Results (using clean_texts for clustering data)
             store_clustered_results(
                 db, 
                 video_id, 
                 job_id, 
-                texts, 
+                clean_texts, 
                 labels, 
                 coords_2d, 
                 rep_indices_map, 

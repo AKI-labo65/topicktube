@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+import re
 from typing import List, Tuple
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
+from sklearn.metrics import silhouette_score
 
 # Lazy-loaded model
 _MODEL = None
+
+# Noise patterns to filter out
+NOISE_PATTERNS = [
+    r'^https?://',  # URLs only
+    r'^[^\w\s]+$',  # Emoji/symbols only
+    r'^(first|nice|lol|lmao|wow|cool|great|awesome|good|bad|yes|no|ok|okay|omg|wtf|w+|草+|ワロタ|www+|笑+)$',
+]
+NOISE_REGEX = re.compile('|'.join(NOISE_PATTERNS), re.IGNORECASE)
+
+MIN_TEXT_LENGTH = 8  # Minimum characters for valid comment
 
 
 def _get_model(model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> SentenceTransformer:
@@ -21,6 +33,40 @@ def _get_model(model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> Se
         _MODEL = SentenceTransformer(model_name)
         print("[clustering] Model loaded.")
     return _MODEL
+
+
+def preprocess_texts(texts: List[str]) -> Tuple[List[str], List[int]]:
+    """
+    Filter out noise comments and return clean texts with their original indices.
+    
+    Returns:
+        Tuple of (clean_texts, original_indices)
+    """
+    clean_texts = []
+    original_indices = []
+    seen = set()  # For deduplication
+    
+    for i, text in enumerate(texts):
+        text = text.strip()
+        
+        # Skip too short
+        if len(text) < MIN_TEXT_LENGTH:
+            continue
+        
+        # Skip noise patterns
+        if NOISE_REGEX.match(text):
+            continue
+        
+        # Skip duplicates
+        normalized = text.lower()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        
+        clean_texts.append(text)
+        original_indices.append(i)
+    
+    return clean_texts, original_indices
 
 
 def embed_comments(texts: List[str]) -> np.ndarray:
@@ -43,9 +89,57 @@ def embed_comments(texts: List[str]) -> np.ndarray:
     return np.asarray(emb, dtype=np.float32)
 
 
-def choose_k(n: int) -> int:
-    """コメント数に応じて壊れにくいクラスタ数を決定（MVP用）"""
-    return max(2, min(6, n // 20))
+def choose_k_by_silhouette(
+    embeddings: np.ndarray,
+    k_min: int = 2,
+    k_max: int = 8,
+    min_cluster_size: int = 3,
+) -> int:
+    """
+    Silhouette法で最適なクラスタ数を選択。
+    
+    Args:
+        embeddings: Shape (n_samples, n_features)
+        k_min: Minimum number of clusters
+        k_max: Maximum number of clusters
+        min_cluster_size: Minimum samples per cluster (reject k if any cluster is smaller)
+    
+    Returns:
+        Optimal k value
+    """
+    n = embeddings.shape[0]
+    
+    # Bounds check
+    k_min = max(2, k_min)
+    k_max = min(k_max, n - 1)  # Need at least k+1 samples
+    
+    if k_max < k_min:
+        return k_min
+    
+    best_k = k_min
+    best_score = -1
+    
+    for k in range(k_min, k_max + 1):
+        try:
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init="auto")
+            labels = kmeans.fit_predict(embeddings)
+            
+            # Check minimum cluster size
+            cluster_sizes = np.bincount(labels)
+            if cluster_sizes.min() < min_cluster_size:
+                continue
+            
+            score = silhouette_score(embeddings, labels)
+            
+            if score > best_score:
+                best_score = score
+                best_k = k
+                
+        except Exception:
+            continue
+    
+    print(f"[clustering] Silhouette method selected k={best_k} (score={best_score:.3f})")
+    return best_k
 
 
 def cluster_comments(
@@ -57,7 +151,7 @@ def cluster_comments(
 
     Args:
         embeddings: Shape (n_samples, n_features)
-        n_clusters: クラスタ数（None の場合は自動決定）
+        n_clusters: クラスタ数（None の場合はSilhouette法で自動決定）
 
     Returns:
         Tuple of (labels, coords_2d, centroids)
@@ -69,7 +163,12 @@ def cluster_comments(
     if n == 0:
         return np.array([]), np.array([]).reshape(0, 2), np.array([])
 
-    k = n_clusters if n_clusters else choose_k(n)
+    # Use Silhouette method if n_clusters not specified
+    if n_clusters is None:
+        k = choose_k_by_silhouette(embeddings)
+    else:
+        k = n_clusters
+    
     k = min(k, n)  # クラスタ数はサンプル数を超えない
 
     print(f"[clustering] Clustering {n} comments into {k} clusters")
@@ -99,12 +198,16 @@ def select_representatives(
     labels: np.ndarray,
     centroids: np.ndarray,
     top_k: int = 3,
+    min_length: int = 20,
+    similarity_threshold: float = 0.95,
 ) -> List[List[int]]:
     """
-    各クラスタの中心に近いコメント index を返す（top_k 件）。
-
-    正規化済み embeddings でコサイン類似度（内積）を使用。
-
+    各クラスタの代表コメントを選択（改善版）。
+    
+    - 中心に近いコメントを優先
+    - 短すぎるコメントは下げ目に補正
+    - 重複（類似度が高すぎる）コメントはスキップ
+    
     Returns:
         cluster_to_indices: 各クラスタの代表コメント index のリスト
     """
@@ -119,9 +222,40 @@ def select_representatives(
 
         # コサイン類似度（正規化済みなので内積）
         sims = embeddings[idxs] @ centroids[c]
-        # 類似度が高い順
-        order = np.argsort(-sims)[:top_k]
-        reps.append(idxs[order].tolist())
+        
+        # 長さ補正: 短いコメントは類似度を下げる
+        length_boost = np.array([
+            1.0 + 0.1 * np.log(max(len(texts[idx]), 1) / min_length)
+            for idx in idxs
+        ])
+        adjusted_sims = sims * np.clip(length_boost, 0.5, 1.5)
+        
+        # 類似度が高い順にソート
+        order = np.argsort(-adjusted_sims)
+        
+        # 重複を避けながら代表を選択
+        selected = []
+        selected_embeddings = []
+        
+        for rank_idx in order:
+            if len(selected) >= top_k:
+                break
+            
+            actual_idx = idxs[rank_idx]
+            candidate_emb = embeddings[actual_idx]
+            
+            # 既存の代表と類似度が高すぎる場合はスキップ
+            is_duplicate = False
+            for prev_emb in selected_embeddings:
+                if np.dot(candidate_emb, prev_emb) > similarity_threshold:
+                    is_duplicate = True
+                    break
+            
+            if not is_duplicate:
+                selected.append(actual_idx)
+                selected_embeddings.append(candidate_emb)
+        
+        reps.append(selected)
 
     return reps
 
