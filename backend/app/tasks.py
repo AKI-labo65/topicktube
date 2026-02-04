@@ -64,3 +64,79 @@ def store_dummy_results(db: Session, video_id: int, job_id: str):
         db.add(cluster)
     set_video_status(db, video_id, StatusEnum.done)
     set_job_status(db, job_id, StatusEnum.done)
+
+
+def store_results_with_comments(
+    db: Session, video_id: int, job_id: str, comments: List[dict]
+):
+    """
+    Store analysis results using real YouTube comments.
+
+    For now, distributes comments into 3 fixed clusters (no real clustering yet).
+    Real clustering with embeddings will be added later.
+    """
+    # Clear previous clusters
+    db.query(Cluster).filter(Cluster.video_id == video_id).delete()
+
+    if not comments:
+        # No comments: create single empty cluster
+        cluster = Cluster(
+            video_id=video_id,
+            label="コメントなし",
+            summary="この動画にはコメントがありません。",
+            size=0,
+            ord_x=0.0,
+            ord_y=0.0,
+            rep_comments_json=[],
+        )
+        db.add(cluster)
+    else:
+        # Distribute comments into 3 clusters (temporary until real clustering)
+        cluster_defs = [
+            {
+                "label": "主要な意見",
+                "summary": "動画に対する主要なコメント群。",
+                "ord_x": -0.5,
+                "ord_y": 0.3,
+            },
+            {
+                "label": "関連する議論",
+                "summary": "動画内容に関連した議論やコメント。",
+                "ord_x": 0.5,
+                "ord_y": 0.3,
+            },
+            {
+                "label": "その他の反応",
+                "summary": "その他の反応やコメント。",
+                "ord_x": 0.0,
+                "ord_y": -0.5,
+            },
+        ]
+
+        # Split comments into 3 groups
+        chunk_size = max(1, len(comments) // 3)
+        comment_chunks = [
+            comments[i : i + chunk_size] for i in range(0, len(comments), chunk_size)
+        ]
+
+        for idx, cluster_def in enumerate(cluster_defs):
+            chunk = comment_chunks[idx] if idx < len(comment_chunks) else []
+            # Take top 5 comments as representative
+            rep_comments = [
+                {"author": c["author"], "text": c["text"]}
+                for c in chunk[:5]
+            ]
+            cluster = Cluster(
+                video_id=video_id,
+                label=cluster_def["label"],
+                summary=cluster_def["summary"],
+                size=len(chunk),
+                ord_x=cluster_def["ord_x"],
+                ord_y=cluster_def["ord_y"],
+                rep_comments_json=rep_comments,
+            )
+            db.add(cluster)
+
+    set_video_status(db, video_id, StatusEnum.done)
+    set_job_status(db, job_id, StatusEnum.done)
+
