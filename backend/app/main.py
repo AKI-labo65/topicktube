@@ -123,12 +123,22 @@ def get_video(video_id: int, db: Session = Depends(get_db)):
     if not video.title and video.youtube_id:
         try:
             video_info = fetch_video_info(video.youtube_id)
-            video.title = video_info.get("title")
-            db.commit()
-            db.refresh(video)
+            new_title = video_info.get("title")
+            if new_title:
+                # Conditional UPDATE to prevent race conditions
+                # Only update if title is still NULL (another request may have filled it)
+                from sqlalchemy import text
+                db.execute(
+                    text("UPDATE videos SET title = :title WHERE id = :id AND (title IS NULL OR title = '')"),
+                    {"title": new_title, "id": video.id}
+                )
+                db.commit()
+                db.refresh(video)
         except Exception as e:
-            # Log but don't fail the request
-            print(f"[backend] Failed to fetch video title: {e}")
+            # Gracefully fail: log but don't fail the request
+            # Frontend will show youtube_id as fallback
+            print(f"[backend] Failed to fetch video title for {video.youtube_id}: {e}")
+            db.rollback()  # Ensure clean state
     
     clusters = [
         ClusterSummary(
