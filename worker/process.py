@@ -54,6 +54,10 @@ def has_complete_analysis(db, video_id: int) -> bool:
     if not video or not video.overall_summary or not video.issue_outline:
         return False
     
+    # video_summary should exist (or status be determined)
+    if not video.video_summary and video.video_summary_status == "pending":
+        return False
+
     return True
 
 
