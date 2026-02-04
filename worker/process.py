@@ -19,14 +19,15 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.db import SessionLocal  # type: ignore  # noqa: E402
-from app.models import StatusEnum, Video  # type: ignore  # noqa: E402
-from app.tasks import set_job_status, set_video_status, store_results_with_comments  # type: ignore  # noqa: E402
+from app.models import Comment, StatusEnum, Video  # type: ignore  # noqa: E402
+from app.tasks import set_job_status, set_video_status, store_clustered_results  # type: ignore  # noqa: E402
 
 from .youtube import fetch_comments, fetch_video_info  # noqa: E402
+from .clustering import embed_comments, cluster_comments, select_representatives, generate_cluster_labels  # noqa: E402
 
 
 def process_video(video_id: int, youtube_url: str):
-    """Process a YouTube video: fetch comments and store results."""
+    """Process a YouTube video: fetch comments, embed, cluster, and store results."""
     job = get_current_job()
     job_id = job.id if job else f"manual-{datetime.utcnow().timestamp()}"
     db = SessionLocal()
@@ -41,9 +42,9 @@ def process_video(video_id: int, youtube_url: str):
 
         # Fetch video info and comments from YouTube API
         video_info = fetch_video_info(yt_video_id)
-        comments = fetch_comments(yt_video_id, max_results=100)
+        comments_data = fetch_comments(yt_video_id, max_results=100)
 
-        print(f"[worker] Fetched {len(comments)} comments for '{video_info['title']}'")
+        print(f"[worker] Fetched {len(comments_data)} comments for '{video_info['title']}'")
 
         # Update video title in database
         video = db.query(Video).filter(Video.id == video_id).first()
@@ -51,8 +52,39 @@ def process_video(video_id: int, youtube_url: str):
             video.title = video_info["title"]
             db.commit()
 
-        # Store results (for now, group all comments into 3 dummy clusters)
-        store_results_with_comments(db, video_id, job_id, comments)
+        # Save comments to database
+        save_comments_to_db(db, video_id, comments_data)
+
+        # Extract text for embedding
+        texts = [c["text"] for c in comments_data]
+
+        if len(texts) < 3:
+            # Not enough comments for meaningful clustering
+            print(f"[worker] Only {len(texts)} comments, skipping clustering")
+            # Store with single empty/default cluster if needed, or handle separately
+            # For MVP, we might just fail or store dummy
+            set_job_status(db, job_id, StatusEnum.done, error_message="Not enough comments")
+            set_video_status(db, video_id, StatusEnum.done)
+        else:
+            # Embed and cluster
+            print(f"[worker] Embedding {len(texts)} comments...")
+            embeddings = embed_comments(texts)
+
+            print(f"[worker] Clustering...")
+            labels, coords_2d, centroids = cluster_comments(embeddings)
+
+            # Select representatives (indices list)
+            rep_indices_map = select_representatives(texts, embeddings, labels, centroids, top_k=3)
+            
+            # Generate labels
+            cluster_labels = generate_cluster_labels(len(centroids))
+
+            print(f"[worker] Created {len(cluster_labels)} clusters")
+
+            # Store results
+            store_clustered_results(
+                db, video_id, job_id, texts, labels, coords_2d, rep_indices_map, cluster_labels
+            )
 
     except Exception as exc:  # pylint: disable=broad-except
         print(f"[worker] Error processing video: {exc}")
@@ -63,23 +95,38 @@ def process_video(video_id: int, youtube_url: str):
         db.close()
 
 
+def save_comments_to_db(db, video_id: int, comments_data: list[dict]):
+    """Save fetched comments to database."""
+    # Clear existing comments for this video
+    db.query(Comment).filter(Comment.video_id == video_id).delete()
+
+    for c in comments_data:
+        comment = Comment(
+            video_id=video_id,
+            text=c["text"],
+            like_count=c.get("likes", 0),
+            published_at=None,
+        )
+        db.add(comment)
+
+    db.commit()
+    print(f"[worker] Saved {len(comments_data)} comments to DB")
+
+
 def extract_video_id(url: str) -> str:
     """Extract YouTube video ID from various URL formats."""
     from urllib.parse import urlparse, parse_qs
 
     parsed = urlparse(str(url))
 
-    # Handle youtu.be/VIDEO_ID
     if parsed.hostname in {"youtu.be"}:
         return parsed.path.lstrip("/")
 
-    # Handle youtube.com/watch?v=VIDEO_ID
     if parsed.hostname and "youtube" in parsed.hostname:
         qs = parse_qs(parsed.query)
         if "v" in qs:
             return qs["v"][0]
 
-    # Fallback: assume the URL is the video ID itself
     return str(url)
 
 

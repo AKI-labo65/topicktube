@@ -104,4 +104,5 @@ npm run dev
 
 - DB は `backend/app.db`（SQLite）に作成されます
 - 再起動すると DB はリセットされます（`app.db` を削除で初期化）
+- **初回解析時は AI モデル（約80MB）のダウンロードがあるため、完了まで時間がかかります**
 - Python 3.10 を推奨（3.13 は SQLAlchemy 2.0.27 と非互換）

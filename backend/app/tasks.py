@@ -137,6 +137,63 @@ def store_results_with_comments(
             )
             db.add(cluster)
 
+def store_clustered_results(
+    db: Session,
+    video_id: int,
+    job_id: str,
+    texts: List[str],
+    labels: List[int],
+    coords_2d: List[List[float]],
+    rep_indices_map: List[List[int]],
+    cluster_labels: List[str],
+):
+    """
+    Store clustered results.
+    
+    Args:
+        labels: Cluster assignment for each text (aligned with texts)
+        coords_2d: 2D coordinates for each text (aligned with texts)
+        rep_indices_map: List of list of text indices for each cluster
+        cluster_labels: List of label strings for each cluster
+    """
+    # Clear previous clusters
+    db.query(Cluster).filter(Cluster.video_id == video_id).delete()
+
+    n_clusters = len(rep_indices_map)
+    
+    for cluster_idx in range(n_clusters):
+        # Calculate cluster size
+        size = 0
+        if labels is not None:
+            size = sum(1 for label in labels if label == cluster_idx)
+        
+        # Calculate cluster center (mean of points in cluster)
+        c_x, c_y = 0.0, 0.0
+        if labels is not None and coords_2d is not None:
+            points = [coords_2d[i] for i, label in enumerate(labels) if label == cluster_idx]
+            if points:
+                avg_x = sum(p[0] for p in points) / len(points)
+                avg_y = sum(p[1] for p in points) / len(points)
+                c_x, c_y = float(avg_x), float(avg_y)
+
+        # Get representative comments text
+        rep_comments = []
+        indices = rep_indices_map[cluster_idx]
+        for idx in indices:
+            if idx < len(texts):
+                rep_comments.append({"author": "Unknown", "text": texts[idx]})
+
+        cluster = Cluster(
+            video_id=video_id,
+            label=cluster_labels[cluster_idx],
+            summary=f"Clustered opinion group {cluster_idx + 1}",
+            size=size,
+            ord_x=c_x,
+            ord_y=c_y,
+            rep_comments_json=rep_comments,
+        )
+        db.add(cluster)
+
     set_video_status(db, video_id, StatusEnum.done)
     set_job_status(db, job_id, StatusEnum.done)
 
