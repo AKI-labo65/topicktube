@@ -71,15 +71,20 @@ def analyze(request: AnalyzeRequest, db: Session = Depends(get_db)):
 
     existing_video: Optional[Video] = db.query(Video).filter(Video.youtube_id == youtube_id).first()
     if existing_video and existing_video.status == StatusEnum.done:
-        # Reuse existing job if available.
-        latest_job = (
-            db.query(Job)
-            .filter(Job.video_id == existing_video.id, Job.status == StatusEnum.done)
-            .order_by(Job.created_at.desc())
-            .first()
-        )
-        if latest_job:
-            return AnalyzeResponse(job_id=latest_job.id)
+        # Check if new features are missing (video_summary)
+        # If pending/missing, force re-analysis (fall through to enqueue)
+        if not existing_video.video_summary and existing_video.video_summary_status == "pending":
+            pass
+        else:
+            # Reuse existing job if available.
+            latest_job = (
+                db.query(Job)
+                .filter(Job.video_id == existing_video.id, Job.status == StatusEnum.done)
+                .order_by(Job.created_at.desc())
+                .first()
+            )
+            if latest_job:
+                return AnalyzeResponse(job_id=latest_job.id)
 
     if not existing_video:
         existing_video = Video(youtube_id=youtube_id, title=None, status=StatusEnum.queued)
