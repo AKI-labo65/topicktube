@@ -18,6 +18,7 @@ type Video = {
   youtube_id: string;
   title?: string;
   overall_summary?: string;
+  issue_outline?: string;
   status: string;
   clusters: Cluster[];
 };
@@ -242,7 +243,7 @@ export default function VideoPage() {
             : "4px solid #cbd5e1",
         }}
       >
-        <h3 style={{ margin: 0, fontSize: 16 }}>📊 コメントの要点</h3>
+        <h3 style={{ margin: 0, fontSize: 16 }}>🧾 視聴者コメントから見える要約</h3>
         {video.overall_summary ? (
           <div
             style={{
@@ -265,6 +266,35 @@ export default function VideoPage() {
           </div>
         )}
       </div>
+
+      {/* Issue Outline Card */}
+      {video.issue_outline && (
+        <div
+          className="card"
+          style={{
+            marginTop: 16,
+            background: "linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%)",
+            borderLeft: "4px solid #0ea5e9",
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: 16 }}>🧩 論点整理</h3>
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 14,
+              lineHeight: 1.7,
+              color: "#1e293b",
+              whiteSpace: "pre-wrap",
+            }}
+            dangerouslySetInnerHTML={{
+              __html: video.issue_outline
+                .replace(/^## /gm, '<strong style="display:block;margin-top:16px;margin-bottom:8px;font-size:15px;color:#0369a1;">')
+                .replace(/\n(?=- )/g, '</strong>\n')
+                .replace(/^- /gm, '• ')
+            }}
+          />
+        </div>
+      )}
 
       {/* Conflict Axis (Stance Balance) */}
       {video.clusters.some(c => c.stance) && (

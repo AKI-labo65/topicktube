@@ -173,3 +173,74 @@ def summarize_overall(
     except Exception as e:
         print(f"[summarize] Error generating overall summary: {e}")
         return None
+
+
+def summarize_issue_outline(
+    clusters_data: List[dict],
+    video_title: str | None = None,
+) -> str | None:
+    """
+    Generate a structured issue outline (issues, disputes, agreements, unanswered questions).
+
+    Args:
+        clusters_data: List of dicts with 'label', 'summary', 'size', 'stance' keys
+        video_title: Title of the video (optional context)
+
+    Returns:
+        Markdown string with structured issue outline, or None if failed
+    """
+    if not clusters_data:
+        return None
+
+    client = get_client()
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+    # Format cluster info
+    cluster_info = "\n".join([
+        f"- {c['label']} ({c['size']}件, {c['stance']}): {c['summary']}"
+        for c in clusters_data
+    ])
+
+    system = (
+        "あなたは動画コメントを分析するアナリストです。"
+        "コメント群から「主要論点」「何が対立しているか（争点）」「何が合意されているか（合意点）」「未解決の問い」を整理してください。"
+    )
+
+    user = f"""
+動画タイトル: {video_title or "不明"}
+
+コメントクラスタの分析結果:
+{cluster_info}
+
+以下のセクション形式で、Markdownで出力してください（見出しは ## を使用）:
+
+## 📌 主要論点
+（議論の中心となっているトピックを3〜6個程度。各1行タイトル＋2〜3行の説明）
+
+## ⚔️ 争点（対立ポイント）
+（肯定派と懐疑派で意見が分かれている点。具体的にどこで対立しているか）
+
+## 🤝 合意点・共通認識
+（スタンスに関わらず多くの人が同意している点、または前提として共有されている事実）
+
+## ❓ 未解決の問い・残された課題
+（結論が出ていない疑問、証拠不足の指摘、今後の懸念点など）
+""".strip()
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.3,
+            max_tokens=800,
+        )
+
+        result = resp.choices[0].message.content or ""
+        return result.strip()
+
+    except Exception as e:
+        print(f"[summarize] Error generating issue outline: {e}")
+        return None

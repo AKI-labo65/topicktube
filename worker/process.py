@@ -30,7 +30,7 @@ from app.tasks import set_job_status, set_video_status, store_clustered_results 
 
 from .youtube import fetch_comments, fetch_video_info  # noqa: E402
 from .clustering import embed_comments, cluster_comments, select_representatives, preprocess_texts  # noqa: E402
-from .summarize import summarize_cluster, summarize_overall  # noqa: E402
+from .summarize import summarize_cluster, summarize_overall, summarize_issue_outline  # noqa: E402
 
 
 def calc_comments_hash(comment_ids: list[str]) -> str:
@@ -49,9 +49,9 @@ def has_complete_analysis(db, video_id: int) -> bool:
     if not all(c.label and c.summary and c.stance for c in clusters):
         return False
     
-    # Check overall_summary exists
+    # Check overall_summary and issue_outline exist
     video = db.query(Video).filter(Video.id == video_id).first()
-    if not video or not video.overall_summary:
+    if not video or not video.overall_summary or not video.issue_outline:
         return False
     
     return True
@@ -163,8 +163,8 @@ def process_video(video_id: int, youtube_url: str):
                 cluster_stances
             )
 
-            # 6. Generate overall summary from cluster data
-            print(f"[worker] Generating overall summary...")
+            # 6. Generate overall summary and issue outline from cluster data
+            print(f"[worker] Generating overall summary and issue outline...")
             clusters_data = []
             for i in range(len(rep_indices_map)):
                 cluster_size = sum(1 for l in labels if l == i)
@@ -172,19 +172,23 @@ def process_video(video_id: int, youtube_url: str):
                     "label": final_cluster_labels[i],
                     "summary": cluster_summaries[i],
                     "size": cluster_size,
+                    "stance": cluster_stances[i],
                 })
             
+            # Generate summaries
             overall_summary = summarize_overall(clusters_data, video_title=video_title)
+            issue_outline = summarize_issue_outline(clusters_data, video_title=video_title)
             
-            # Save to video only if summary generation succeeded
-            if overall_summary:
-                video = db.query(Video).filter(Video.id == video_id).first()
-                if video:
+            # Save to video
+            video = db.query(Video).filter(Video.id == video_id).first()
+            if video:
+                if overall_summary:
                     video.overall_summary = overall_summary
-                    db.commit()
-                    print(f"[worker] Overall summary saved")
-            else:
-                print(f"[worker] Overall summary generation failed or returned empty")
+                if issue_outline:
+                    video.issue_outline = issue_outline
+                
+                db.commit()
+                print(f"[worker] Summaries saved (overall: {bool(overall_summary)}, outline: {bool(issue_outline)})")
 
     except Exception as exc:  # pylint: disable=broad-except
         print(f"[worker] Error processing video: {exc}")

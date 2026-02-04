@@ -25,6 +25,7 @@ class Video(Base):
     status = Column(Enum(StatusEnum), default=StatusEnum.queued, nullable=False)
     hash_version = Column(String, nullable=True)  # SHA256 of comment IDs for cache invalidation
     overall_summary = Column(Text, nullable=True)  # LLM-generated summary of all cluster key points
+    issue_outline = Column(Text, nullable=True)  # LLM-generated structured issue outline
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

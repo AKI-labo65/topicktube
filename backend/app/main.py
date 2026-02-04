@@ -158,6 +158,7 @@ def get_video(video_id: int, db: Session = Depends(get_db)):
         youtube_id=video.youtube_id,
         title=video.title,
         overall_summary=video.overall_summary,
+        issue_outline=video.issue_outline,
         status=video.status,
         created_at=video.created_at,
         updated_at=video.updated_at,
