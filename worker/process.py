@@ -13,6 +13,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from rq import Queue, Worker, Connection, get_current_job
+from rq.worker import SimpleWorker
 from redis import Redis
 
 # Load environment variables from worker/.env
@@ -256,8 +257,8 @@ def main():
     redis_conn = Redis.from_url(redis_url)
     Queue(name=queue_name, connection=redis_conn)
     with Connection(redis_conn):
-        worker = Worker([queue_name])
-        print(f"[worker] listening on queue='{queue_name}' redis='{redis_url}'")
+        worker = SimpleWorker([queue_name], connection=redis_conn)
+        print(f"[worker] listening on queue='{queue_name}' redis='{redis_url}' (SimpleWorker mode)")
         worker.work(with_scheduler=False)
 
 
