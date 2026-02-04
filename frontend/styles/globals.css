@@ -27,11 +27,17 @@ a {
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.1);
 }
 
 .grid {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
 }
 
 .button {
@@ -41,6 +47,12 @@ a {
   border-radius: 8px;
   padding: 10px 14px;
   cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.button:hover {
+  background: #1e293b;
+  transform: translateY(-1px);
 }
 
 .button:disabled {
