@@ -40,6 +40,7 @@ export default function VideoPage() {
   const [hoveredCluster, setHoveredCluster] = useState<Cluster | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState(false);
   const cardRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
   useEffect(() => {
@@ -98,8 +99,6 @@ export default function VideoPage() {
   if (!video) {
     return <div className="container">読み込み中...</div>;
   }
-
-  const [copyFeedback, setCopyFeedback] = useState(false);
 
   const youtubeUrl = `https://www.youtube.com/watch?v=${video.youtube_id}`;
   const thumbnailUrl = `https://i.ytimg.com/vi/${video.youtube_id}/hqdefault.jpg`;
