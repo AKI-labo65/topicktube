@@ -28,6 +28,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from worker.process import process_video  # type: ignore  # noqa: E402
+from worker.youtube import fetch_video_info  # type: ignore  # noqa: E402
 
 # Create tables on startup (simple for MVP; use migrations later).
 Base.metadata.create_all(bind=engine)
@@ -117,6 +118,18 @@ def get_video(video_id: int, db: Session = Depends(get_db)):
     video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
+    
+    # Auto-fill title if missing
+    if not video.title and video.youtube_id:
+        try:
+            video_info = fetch_video_info(video.youtube_id)
+            video.title = video_info.get("title")
+            db.commit()
+            db.refresh(video)
+        except Exception as e:
+            # Log but don't fail the request
+            print(f"[backend] Failed to fetch video title: {e}")
+    
     clusters = [
         ClusterSummary(
             id=c.id,
