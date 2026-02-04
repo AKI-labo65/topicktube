@@ -112,11 +112,18 @@ def fetch_transcript(video_id: str) -> str | None:
     from youtube_transcript_api import YouTubeTranscriptApi
     
     try:
-        # Try to get Japanese transcript first, then English, then auto-generated
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['ja', 'en'])
+        # Instantiate API client
+        api = YouTubeTranscriptApi()
+        
+        # Get transcript list and find preferred language
+        transcript_list = api.list(video_id)
+        transcript = transcript_list.find_transcript(['ja', 'en'])
+        
+        # Fetch actual data
+        result = transcript.fetch()
         
         # Combine text
-        full_text = " ".join([t['text'] for t in transcript_list])
+        full_text = " ".join([t['text'] for t in result])
         return full_text
         
     except Exception as e:
