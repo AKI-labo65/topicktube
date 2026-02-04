@@ -1,0 +1,46 @@
+# render.yaml - Render Blueprint for TopickTube
+# Deploy with: Connect repo to Render and use this file
+
+services:
+  # Backend API (FastAPI)
+  - type: web
+    name: topicktube-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false  # Set manually from Supabase
+      - key: REDIS_URL
+        sync: false  # Set manually from Upstash
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: PYTHON_VERSION
+        value: "3.10"
+    healthCheckPath: /health
+
+  # Background Worker (RQ)
+  - type: worker
+    name: topicktube-worker
+    runtime: python
+    rootDir: worker
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m worker.process
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: PYTHON_VERSION
+        value: "3.10"
