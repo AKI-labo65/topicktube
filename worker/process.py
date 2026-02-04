@@ -39,13 +39,21 @@ def calc_comments_hash(comment_ids: list[str]) -> str:
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
-def has_valid_clusters(db, video_id: int) -> bool:
-    """Check if video has clusters with valid labels and summaries."""
+def has_complete_analysis(db, video_id: int) -> bool:
+    """Check if video has complete analysis (valid clusters AND overall summary)."""
+    # Check clusters
     clusters = db.query(Cluster).filter(Cluster.video_id == video_id).all()
     if not clusters:
         return False
-    # All clusters must have non-empty label and summary
-    return all(c.label and c.summary for c in clusters)
+    if not all(c.label and c.summary for c in clusters):
+        return False
+    
+    # Check overall_summary exists
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video or not video.overall_summary:
+        return False
+    
+    return True
 
 
 def process_video(video_id: int, youtube_url: str):
@@ -78,9 +86,9 @@ def process_video(video_id: int, youtube_url: str):
             video.title = video_title
 
         # === CACHE CHECK ===
-        # If hash matches AND we already have valid clusters, skip everything
-        if video and video.hash_version == new_hash and has_valid_clusters(db, video_id):
-            print(f"[worker] Cache hit! Same comments and clusters exist. Skipping processing.")
+        # If hash matches AND we already have complete analysis (clusters + overall_summary), skip
+        if video and video.hash_version == new_hash and has_complete_analysis(db, video_id):
+            print(f"[worker] Cache hit! Complete analysis exists. Skipping processing.")
             set_job_status(db, job_id, StatusEnum.done)
             set_video_status(db, video_id, StatusEnum.done)
             db.commit()
