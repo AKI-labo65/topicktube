@@ -146,6 +146,7 @@ def store_clustered_results(
     coords_2d: List[List[float]],
     rep_indices_map: List[List[int]],
     cluster_labels: List[str],
+    cluster_summaries: List[str] | None = None,
 ):
     """
     Store clustered results.
@@ -155,6 +156,7 @@ def store_clustered_results(
         coords_2d: 2D coordinates for each text (aligned with texts)
         rep_indices_map: List of list of text indices for each cluster
         cluster_labels: List of label strings for each cluster
+        cluster_summaries: List of summary strings for each cluster
     """
     # Clear previous clusters
     db.query(Cluster).filter(Cluster.video_id == video_id).delete()
@@ -183,10 +185,15 @@ def store_clustered_results(
             if idx < len(texts):
                 rep_comments.append({"author": "Unknown", "text": texts[idx]})
 
+        # Get summary if available
+        summary_text = f"Clustered opinion group {cluster_idx + 1}"
+        if cluster_summaries and cluster_idx < len(cluster_summaries):
+            summary_text = cluster_summaries[cluster_idx]
+
         cluster = Cluster(
             video_id=video_id,
             label=cluster_labels[cluster_idx],
-            summary=f"Clustered opinion group {cluster_idx + 1}",
+            summary=summary_text,
             size=size,
             ord_x=c_x,
             ord_y=c_y,
