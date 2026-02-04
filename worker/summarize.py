@@ -103,7 +103,7 @@ SUMMARY: <2〜3文の要約>
 def summarize_overall(
     clusters_data: List[dict],
     video_title: str | None = None,
-) -> str:
+) -> str | None:
     """
     Generate an overall summary from all cluster labels and summaries.
 
@@ -112,10 +112,10 @@ def summarize_overall(
         video_title: Title of the video (optional context)
 
     Returns:
-        Overall summary as markdown-formatted string with key points
+        Overall summary as markdown-formatted string with key points, or None if failed
     """
     if not clusters_data:
-        return "クラスタが見つかりませんでした。"
+        return None
 
     client = get_client()
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -165,4 +165,4 @@ def summarize_overall(
 
     except Exception as e:
         print(f"[summarize] Error generating overall summary: {e}")
-        return "全体要約の生成に失敗しました。"
+        return None

@@ -203,16 +203,20 @@ export default function VideoPage() {
       </div>
 
       {/* Overall Summary Card */}
-      {video.overall_summary && (
-        <div
-          className="card"
-          style={{
-            marginTop: 16,
-            background: "linear-gradient(135deg, #fef3c7 0%, #fff7ed 100%)",
-            borderLeft: "4px solid #f59e0b",
-          }}
-        >
-          <h3 style={{ margin: 0, fontSize: 16 }}>📊 コメントの要点</h3>
+      <div
+        className="card"
+        style={{
+          marginTop: 16,
+          background: video.overall_summary
+            ? "linear-gradient(135deg, #fef3c7 0%, #fff7ed 100%)"
+            : "#f8fafc",
+          borderLeft: video.overall_summary
+            ? "4px solid #f59e0b"
+            : "4px solid #cbd5e1",
+        }}
+      >
+        <h3 style={{ margin: 0, fontSize: 16 }}>📊 コメントの要点</h3>
+        {video.overall_summary ? (
           <div
             style={{
               marginTop: 12,
@@ -228,8 +232,12 @@ export default function VideoPage() {
                 .replace(/^- /gm, '• ')
             }}
           />
-        </div>
-      )}
+        ) : (
+          <div style={{ marginTop: 12, fontSize: 14, color: "#64748b" }}>
+            要約の生成に失敗しました。再解析してください。
+          </div>
+        )}
+      </div>
 
       {/* Map Section */}
       <div className="card" style={{ marginTop: 16 }}>

@@ -172,12 +172,15 @@ def process_video(video_id: int, youtube_url: str):
             
             overall_summary = summarize_overall(clusters_data, video_title=video_title)
             
-            # Save to video
-            video = db.query(Video).filter(Video.id == video_id).first()
-            if video:
-                video.overall_summary = overall_summary
-                db.commit()
-                print(f"[worker] Overall summary saved")
+            # Save to video only if summary generation succeeded
+            if overall_summary:
+                video = db.query(Video).filter(Video.id == video_id).first()
+                if video:
+                    video.overall_summary = overall_summary
+                    db.commit()
+                    print(f"[worker] Overall summary saved")
+            else:
+                print(f"[worker] Overall summary generation failed or returned empty")
 
     except Exception as exc:  # pylint: disable=broad-except
         print(f"[worker] Error processing video: {exc}")

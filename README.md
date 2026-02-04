@@ -106,3 +106,15 @@ npm run dev
 - 再起動すると DB はリセットされます（`app.db` を削除で初期化）
 - **初回解析時は AI モデル（約80MB）のダウンロードがあるため、完了まで時間がかかります**
 - Python 3.10 を推奨（3.13 は SQLAlchemy 2.0.27 と非互換）
+
+## 手動メンテナンス（開発者向け）
+
+### DBマイグレーション（カラム追加）
+
+既存のデータベース (`app.db`) を維持したまま新しい機能を有効にするには、以下のSQLを実行してください。
+
+```bash
+# 動画タイトル保存用カラムの追加
+sqlite3 backend/app.db "ALTER TABLE videos ADD COLUMN hash_version TEXT;"
+sqlite3 backend/app.db "ALTER TABLE videos ADD COLUMN overall_summary TEXT;"
+```
