@@ -23,18 +23,19 @@ def get_client() -> OpenAI:
 def summarize_cluster(
     representative_texts: List[str],
     video_title: str | None = None,
-) -> Tuple[str, str]:
+) -> Tuple[str, str, str]:
     """
-    Generate a label and summary for a cluster of comments.
+    Generate a label, summary, and stance for a cluster of comments.
 
     Args:
         representative_texts: List of representative comment strings
         video_title: Title of the video (optional context)
 
     Returns:
-        Tuple of (label, summary)
+        Tuple of (label, summary, stance)
         - label: Short topic name (8-18 chars)
         - summary: 2-3 sentence summary
+        - stance: 'support', 'skeptic', or 'neutral'
     """
     client = get_client()
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -58,6 +59,7 @@ def summarize_cluster(
 出力形式（厳守）:
 LABEL: <短い論点名>
 SUMMARY: <2〜3文の要約>
+STANCE: <support|skeptic|neutral> (動画内容に対して肯定的=support, 懐疑的/批判的=skeptic, 中立/その他=neutral)
 """.strip()
 
     try:
@@ -74,6 +76,7 @@ SUMMARY: <2〜3文の要約>
         text = resp.choices[0].message.content or ""
         label = ""
         summary = ""
+        stance = "neutral"
 
         # Parse output
         for line in text.splitlines():
@@ -82,6 +85,10 @@ SUMMARY: <2〜3文の要約>
                 label = line.replace("LABEL:", "").strip()
             elif line.startswith("SUMMARY:"):
                 summary = line.replace("SUMMARY:", "").strip()
+            elif line.startswith("STANCE:"):
+                parsed_stance = line.replace("STANCE:", "").strip().lower()
+                if parsed_stance in ["support", "skeptic", "neutral"]:
+                    stance = parsed_stance
 
         # Fallback if parsing failed
         if not label:
@@ -93,11 +100,11 @@ SUMMARY: <2〜3文の要約>
             # Use the whole text if summary tag missing
             summary = text.replace("SUMMARY:", "").strip()[:200]
 
-        return label, summary
+        return label, summary, stance
 
     except Exception as e:
         print(f"[summarize] Error generating summary: {e}")
-        return "論点（生成エラー）", "要約の生成に失敗しました。"
+        return "論点（生成エラー）", "要約の生成に失敗しました。", "neutral"
 
 
 def summarize_overall(

@@ -147,6 +147,7 @@ def store_clustered_results(
     rep_indices_map: List[List[int]],
     cluster_labels: List[str],
     cluster_summaries: List[str] | None = None,
+    cluster_stances: List[str] | None = None,
 ):
     """
     Store clustered results.
@@ -157,6 +158,7 @@ def store_clustered_results(
         rep_indices_map: List of list of text indices for each cluster
         cluster_labels: List of label strings for each cluster
         cluster_summaries: List of summary strings for each cluster
+        cluster_stances: List of stance strings for each cluster
     """
     # Clear previous clusters
     db.query(Cluster).filter(Cluster.video_id == video_id).delete()
@@ -185,11 +187,16 @@ def store_clustered_results(
             if idx < len(texts):
                 rep_comments.append({"author": "Unknown", "text": texts[idx]})
 
-        # Get summary if available
+        # Get summary and stance if available
         summary_text = f"Clustered opinion group {cluster_idx + 1}"
         if cluster_summaries and cluster_idx < len(cluster_summaries):
             summary_text = cluster_summaries[cluster_idx]
+            
+        stance_text = "neutral"
+        if cluster_stances and cluster_idx < len(cluster_stances):
+            stance_text = cluster_stances[cluster_idx]
 
+        # Save Cluster
         cluster = Cluster(
             video_id=video_id,
             label=cluster_labels[cluster_idx],
@@ -197,10 +204,11 @@ def store_clustered_results(
             size=size,
             ord_x=c_x,
             ord_y=c_y,
+            stance=stance_text,
             rep_comments_json=rep_comments,
         )
         db.add(cluster)
 
+    db.commit()
     set_video_status(db, video_id, StatusEnum.done)
     set_job_status(db, job_id, StatusEnum.done)
-

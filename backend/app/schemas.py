@@ -23,6 +23,7 @@ class ClusterSummary(BaseModel):
     id: int
     label: str
     summary: Optional[str] = None
+    stance: Optional[str] = None
     size: int
     ord_x: float
     ord_y: float
@@ -45,5 +46,6 @@ class ClusterDetail(BaseModel):
     video_id: int
     label: str
     summary: Optional[str] = None
+    stance: Optional[str] = None
     rep_comments_json: Optional[list] = None
 

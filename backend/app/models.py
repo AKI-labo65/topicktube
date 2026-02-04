@@ -55,6 +55,7 @@ class Cluster(Base):
     size = Column(Integer, default=0)
     ord_x = Column(Float, default=0.0)
     ord_y = Column(Float, default=0.0)
+    stance = Column(String, nullable=True)  # support, skeptic, neutral
     rep_comments_json = Column(JSON, nullable=True)  # list of brief representative comments
 
     video = relationship("Video", back_populates="clusters")

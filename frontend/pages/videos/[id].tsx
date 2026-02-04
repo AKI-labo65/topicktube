@@ -6,6 +6,7 @@ type Cluster = {
   id: number;
   label: string;
   summary?: string;
+  stance?: "support" | "skeptic" | "neutral";
   size: number;
   ord_x: number;
   ord_y: number;
@@ -21,16 +22,17 @@ type Video = {
   clusters: Cluster[];
 };
 
-// Color palette for clusters (vibrant, distinguishable)
+// Stance colors
+const STANCE_COLORS = {
+  support: "#3b82f6", // blue-500
+  skeptic: "#ef4444", // red-500
+  neutral: "#94a3b8", // slate-400
+};
+
+// Fallback palette
 const CLUSTER_COLORS = [
-  "#6366f1", // indigo
-  "#ec4899", // pink
-  "#f59e0b", // amber
-  "#10b981", // emerald
-  "#3b82f6", // blue
-  "#8b5cf6", // violet
-  "#ef4444", // red
-  "#14b8a6", // teal
+  "#6366f1", "#ec4899", "#f59e0b", "#10b981",
+  "#3b82f6", "#8b5cf6", "#ef4444", "#14b8a6",
 ];
 
 export default function VideoPage() {
@@ -51,7 +53,10 @@ export default function VideoPage() {
       .catch(() => setError("動画データの取得に失敗しました"));
   }, [id]);
 
-  const getClusterColor = (index: number) => {
+  const getClusterColor = (c: Cluster, index: number) => {
+    if (c.stance && STANCE_COLORS[c.stance]) {
+      return STANCE_COLORS[c.stance];
+    }
     return CLUSTER_COLORS[index % CLUSTER_COLORS.length];
   };
 
@@ -69,7 +74,7 @@ export default function VideoPage() {
       width: size,
       height: size,
       borderRadius: "50%",
-      background: getClusterColor(index),
+      background: getClusterColor(c, index),
       opacity: isHovered || isHighlighted ? 1 : 0.85,
       transform: `translate(-50%, -50%) scale(${isHovered ? 1.3 : 1})`,
       cursor: "pointer",
@@ -239,6 +244,55 @@ export default function VideoPage() {
         )}
       </div>
 
+      {/* Conflict Axis (Stance Balance) */}
+      {video.clusters.some(c => c.stance) && (
+        <div className="card" style={{ marginTop: 16, padding: "20px 24px" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 16 }}>⚖️ 意見の対立軸 (全体バランス)</h3>
+
+          {/* Bar Chart */}
+          <div style={{ display: "flex", height: 24, borderRadius: 12, overflow: "hidden", background: "#f1f5f9" }}>
+            {(() => {
+              const total = video.clusters.reduce((sum, c) => sum + c.size, 0);
+              const support = video.clusters.filter(c => c.stance === "support").reduce((sum, c) => sum + c.size, 0);
+              const skeptic = video.clusters.filter(c => c.stance === "skeptic").reduce((sum, c) => sum + c.size, 0);
+              const neutral = video.clusters.filter(c => c.stance === "neutral" || !c.stance).reduce((sum, c) => sum + c.size, 0);
+
+              if (total === 0) return null;
+
+              return (
+                <>
+                  {support > 0 && (
+                    <div style={{ width: `${(support / total) * 100}%`, background: STANCE_COLORS.support }} title={`肯定的: ${support}件`} />
+                  )}
+                  {neutral > 0 && (
+                    <div style={{ width: `${(neutral / total) * 100}%`, background: STANCE_COLORS.neutral }} title={`中立/その他: ${neutral}件`} />
+                  )}
+                  {skeptic > 0 && (
+                    <div style={{ width: `${(skeptic / total) * 100}%`, background: STANCE_COLORS.skeptic }} title={`懐疑的: ${skeptic}件`} />
+                  )}
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Legend */}
+          <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 13, color: "#475569", justifyContent: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: STANCE_COLORS.support }}></div>
+              肯定的
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: STANCE_COLORS.neutral }}></div>
+              中立・情報共有
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: STANCE_COLORS.skeptic }}></div>
+              懐疑的・批判的
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Map Section */}
       <div className="card" style={{ marginTop: 16 }}>
         <h3>💬 意見マップ</h3>
@@ -346,11 +400,11 @@ export default function VideoPage() {
               ref={(el) => (cardRefs.current[c.id] = el)}
               className="card"
               style={{
-                borderLeft: `5px solid ${getClusterColor(index)}`,
+                borderLeft: `5px solid ${getClusterColor(c, index)}`,
                 transition: "all 0.3s ease",
                 transform: highlightedId === c.id ? "scale(1.02)" : "scale(1)",
                 boxShadow: highlightedId === c.id
-                  ? `0 8px 24px ${getClusterColor(index)}40`
+                  ? `0 8px 24px ${getClusterColor(c, index)}40`
                   : undefined,
               }}
             >
@@ -360,7 +414,7 @@ export default function VideoPage() {
                     width: 12,
                     height: 12,
                     borderRadius: "50%",
-                    background: getClusterColor(index),
+                    background: getClusterColor(c, index),
                     flexShrink: 0,
                   }}
                 />

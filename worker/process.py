@@ -45,7 +45,8 @@ def has_complete_analysis(db, video_id: int) -> bool:
     clusters = db.query(Cluster).filter(Cluster.video_id == video_id).all()
     if not clusters:
         return False
-    if not all(c.label and c.summary for c in clusters):
+    # All clusters must have non-empty label, summary, and stance
+    if not all(c.label and c.summary and c.stance for c in clusters):
         return False
     
     # Check overall_summary exists
@@ -132,19 +133,21 @@ def process_video(video_id: int, youtube_url: str):
             print(f"[worker] Summarizing {len(rep_indices_map)} clusters with LLM...")
             final_cluster_labels = []
             cluster_summaries = []
+            cluster_stances = []
             
             for i in range(len(rep_indices_map)):
                 rep_indices = rep_indices_map[i]
                 rep_texts = [clean_texts[idx] for idx in rep_indices]
                 
                 if not rep_texts:
-                    label, summary = f"Group {i+1}", "No content"
+                    label, summary, stance = f"Group {i+1}", "No content", "neutral"
                 else:
-                    label, summary = summarize_cluster(rep_texts, video_title=video_title)
+                    label, summary, stance = summarize_cluster(rep_texts, video_title=video_title)
                 
-                print(f"[worker] Cluster {i}: {label}")
+                print(f"[worker] Cluster {i}: {label} ({stance})")
                 final_cluster_labels.append(label)
                 cluster_summaries.append(summary)
+                cluster_stances.append(stance)
 
             # 5. Store Results (using clean_texts for clustering data)
             store_clustered_results(
@@ -156,7 +159,8 @@ def process_video(video_id: int, youtube_url: str):
                 coords_2d, 
                 rep_indices_map, 
                 final_cluster_labels,
-                cluster_summaries
+                cluster_summaries,
+                cluster_stances
             )
 
             # 6. Generate overall summary from cluster data

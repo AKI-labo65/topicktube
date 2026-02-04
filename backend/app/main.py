@@ -148,6 +148,7 @@ def get_video(video_id: int, db: Session = Depends(get_db)):
             size=c.size,
             ord_x=c.ord_x,
             ord_y=c.ord_y,
+            stance=c.stance,
             rep_comments_json=c.rep_comments_json,
         )
         for c in db.query(Cluster).filter(Cluster.video_id == video_id).all()
@@ -174,5 +175,6 @@ def get_cluster(cluster_id: int, db: Session = Depends(get_db)):
         video_id=cluster.video_id,
         label=cluster.label,
         summary=cluster.summary,
+        stance=cluster.stance,
         rep_comments_json=cluster.rep_comments_json,
     )
