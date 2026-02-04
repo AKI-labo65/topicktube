@@ -99,10 +99,108 @@ export default function VideoPage() {
     return <div className="container">読み込み中...</div>;
   }
 
+  const [copyFeedback, setCopyFeedback] = useState(false);
+
+  const youtubeUrl = `https://www.youtube.com/watch?v=${video.youtube_id}`;
+  const thumbnailUrl = `https://i.ytimg.com/vi/${video.youtube_id}/hqdefault.jpg`;
+
+  const handleCopyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(youtubeUrl);
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
   return (
     <div className="container">
-      <h1>{video.title || "論点の全体像"}</h1>
-      <p style={{ color: "#64748b", marginTop: -8 }}>動画ID: {video.youtube_id}</p>
+      <h1>論点の全体像</h1>
+
+      {/* Video Header Card */}
+      <div
+        className="card"
+        style={{
+          display: "flex",
+          gap: 16,
+          alignItems: "flex-start",
+          marginTop: 12,
+        }}
+      >
+        {/* Thumbnail */}
+        <a
+          href={youtubeUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ flexShrink: 0 }}
+        >
+          <img
+            src={thumbnailUrl}
+            alt="動画サムネイル"
+            style={{
+              width: 160,
+              height: 90,
+              objectFit: "cover",
+              borderRadius: 8,
+              background: "#e2e8f0",
+            }}
+          />
+        </a>
+
+        {/* Video Info */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h2 style={{
+            fontSize: 18,
+            fontWeight: 600,
+            margin: 0,
+            lineHeight: 1.4,
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+          }}>
+            {video.title || video.youtube_id}
+          </h2>
+
+          <p style={{
+            color: "#64748b",
+            fontSize: 13,
+            margin: "6px 0 12px",
+          }}>
+            動画ID: {video.youtube_id}
+          </p>
+
+          {/* Action Buttons */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <a
+              href={youtubeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="button"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                textDecoration: "none",
+                fontSize: 14,
+              }}
+            >
+              ▶ YouTubeで開く
+            </a>
+            <button
+              className="button"
+              onClick={handleCopyUrl}
+              style={{
+                background: copyFeedback ? "#10b981" : "#475569",
+                fontSize: 14,
+              }}
+            >
+              {copyFeedback ? "✓ コピーしました" : "🔗 URLをコピー"}
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Map Section */}
       <div className="card" style={{ marginTop: 16 }}>
