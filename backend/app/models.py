@@ -23,6 +23,7 @@ class Video(Base):
     youtube_id = Column(String, unique=True, nullable=False, index=True)
     title = Column(String, nullable=True)
     status = Column(Enum(StatusEnum), default=StatusEnum.queued, nullable=False)
+    hash_version = Column(String, nullable=True)  # SHA256 of comment IDs for cache invalidation
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

@@ -6,6 +6,7 @@ os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 os.environ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+import hashlib
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -24,12 +25,27 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.db import SessionLocal  # type: ignore  # noqa: E402
-from app.models import Comment, StatusEnum, Video  # type: ignore  # noqa: E402
+from app.models import Cluster, Comment, StatusEnum, Video  # type: ignore  # noqa: E402
 from app.tasks import set_job_status, set_video_status, store_clustered_results  # type: ignore  # noqa: E402
 
 from .youtube import fetch_comments, fetch_video_info  # noqa: E402
-from .clustering import embed_comments, cluster_comments, select_representatives, generate_cluster_labels  # noqa: E402
+from .clustering import embed_comments, cluster_comments, select_representatives  # noqa: E402
 from .summarize import summarize_cluster  # noqa: E402
+
+
+def calc_comments_hash(comment_ids: list[str]) -> str:
+    """Calculate SHA256 hash of comment IDs for cache invalidation."""
+    joined = "\n".join(sorted(comment_ids))
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+
+
+def has_valid_clusters(db, video_id: int) -> bool:
+    """Check if video has clusters with valid labels and summaries."""
+    clusters = db.query(Cluster).filter(Cluster.video_id == video_id).all()
+    if not clusters:
+        return False
+    # All clusters must have non-empty label and summary
+    return all(c.label and c.summary for c in clusters)
 
 
 def process_video(video_id: int, youtube_url: str):
@@ -52,10 +68,27 @@ def process_video(video_id: int, youtube_url: str):
 
         print(f"[worker] Fetched {len(comments_data)} comments for '{video_title}'")
 
-        # Update video title
+        # Calculate hash of comment IDs
+        comment_ids = [c.get("comment_id", c["text"][:50]) for c in comments_data]
+        new_hash = calc_comments_hash(comment_ids)
+
+        # Get video from DB
         video = db.query(Video).filter(Video.id == video_id).first()
         if video:
             video.title = video_title
+
+        # === CACHE CHECK ===
+        # If hash matches AND we already have valid clusters, skip everything
+        if video and video.hash_version == new_hash and has_valid_clusters(db, video_id):
+            print(f"[worker] Cache hit! Same comments and clusters exist. Skipping processing.")
+            set_job_status(db, job_id, StatusEnum.done)
+            set_video_status(db, video_id, StatusEnum.done)
+            db.commit()
+            return
+
+        # Update hash
+        if video:
+            video.hash_version = new_hash
             db.commit()
 
         # Save comments
@@ -79,13 +112,8 @@ def process_video(video_id: int, youtube_url: str):
             
             # 3. Summarize with LLM
             print(f"[worker] Summarizing {len(rep_indices_map)} clusters with LLM...")
-            cluster_labels = []
-            cluster_summaries = [] # New: store summaries (currently not passed to store_clustered_results but good to have ready)
-            
-            # Note: tasks.store_clustered_results currently takes cluster_labels but logic handles objects inside 
-            # We need to pass labels and potentially summaries if we update tasks.py
-            
             final_cluster_labels = []
+            cluster_summaries = []
             
             for i in range(len(rep_indices_map)):
                 rep_indices = rep_indices_map[i]
@@ -98,12 +126,6 @@ def process_video(video_id: int, youtube_url: str):
                 
                 print(f"[worker] Cluster {i}: {label}")
                 final_cluster_labels.append(label)
-                # We will inject summary into the label or store it if schema allows
-                # app.tasks.store_clustered_results expects list of strings for labels
-                
-                # To actually store summary, we need to update store_clustered_results or hack it
-                # For MVP, let's pass it to store_clustered_results. 
-                # We need to update tasks.py signature first.
                 cluster_summaries.append(summary)
 
             # 4. Store Results
@@ -116,7 +138,7 @@ def process_video(video_id: int, youtube_url: str):
                 coords_2d, 
                 rep_indices_map, 
                 final_cluster_labels,
-                cluster_summaries # We will add this arg to tasks.py next
+                cluster_summaries
             )
 
     except Exception as exc:  # pylint: disable=broad-except
