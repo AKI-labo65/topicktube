@@ -19,6 +19,8 @@ type Video = {
   title?: string;
   overall_summary?: string;
   issue_outline?: string;
+  video_summary?: string;
+  video_summary_status?: string;
   status: string;
   clusters: Cluster[];
 };
@@ -239,6 +241,40 @@ export default function VideoPage() {
         </div>
       </div>
 
+
+
+      {/* Video Summary Card */}
+      {
+        video.video_summary && (
+          <div
+            className="card"
+            style={{
+              marginTop: 16,
+              background: "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)",
+              borderLeft: "4px solid #10b981",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <h3 style={{ margin: 0, fontSize: 16 }}>🎬 動画の要約 (AI生成)</h3>
+              <span style={{ fontSize: 12, color: "#64748b" }}>
+                ソース: {video.video_summary_status === "ok" ? "字幕" : "説明文"}
+              </span>
+            </div>
+            <div
+              style={{
+                marginTop: 12,
+                fontSize: 14,
+                lineHeight: 1.7,
+                color: "#1e293b",
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {video.video_summary}
+            </div>
+          </div>
+        )
+      }
+
       {/* Overall Summary Card */}
       <div
         className="card"
@@ -277,82 +313,86 @@ export default function VideoPage() {
       </div>
 
       {/* Issue Outline Card */}
-      {video.issue_outline && (
-        <div
-          className="card"
-          style={{
-            marginTop: 16,
-            background: "linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%)",
-            borderLeft: "4px solid #0ea5e9",
-          }}
-        >
-          <h3 style={{ margin: 0, fontSize: 16 }}>🧩 論点整理</h3>
+      {
+        video.issue_outline && (
           <div
+            className="card"
             style={{
-              marginTop: 12,
-              fontSize: 14,
-              lineHeight: 1.7,
-              color: "#1e293b",
-              whiteSpace: "pre-wrap",
+              marginTop: 16,
+              background: "linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%)",
+              borderLeft: "4px solid #0ea5e9",
             }}
-            dangerouslySetInnerHTML={{
-              __html: video.issue_outline
-                .replace(/^## /gm, '<strong style="display:block;margin-top:16px;margin-bottom:8px;font-size:15px;color:#0369a1;">')
-                .replace(/\n(?=- )/g, '</strong>\n')
-                .replace(/^- /gm, '• ')
-            }}
-          />
-        </div>
-      )}
+          >
+            <h3 style={{ margin: 0, fontSize: 16 }}>🧩 論点整理</h3>
+            <div
+              style={{
+                marginTop: 12,
+                fontSize: 14,
+                lineHeight: 1.7,
+                color: "#1e293b",
+                whiteSpace: "pre-wrap",
+              }}
+              dangerouslySetInnerHTML={{
+                __html: video.issue_outline
+                  .replace(/^## /gm, '<strong style="display:block;margin-top:16px;margin-bottom:8px;font-size:15px;color:#0369a1;">')
+                  .replace(/\n(?=- )/g, '</strong>\n')
+                  .replace(/^- /gm, '• ')
+              }}
+            />
+          </div>
+        )
+      }
 
       {/* Conflict Axis (Stance Balance) */}
-      {video.clusters.some(c => c.stance) && (
-        <div className="card" style={{ marginTop: 16, padding: "20px 24px" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 16 }}>⚖️ 意見の対立軸 (全体バランス)</h3>
+      {
+        video.clusters.some(c => c.stance) && (
+          <div className="card" style={{ marginTop: 16, padding: "20px 24px" }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: 16 }}>⚖️ 意見の対立軸 (全体バランス)</h3>
 
-          {/* Bar Chart */}
-          <div style={{ display: "flex", height: 24, borderRadius: 12, overflow: "hidden", background: "#f1f5f9" }}>
-            {(() => {
-              const total = video.clusters.reduce((sum, c) => sum + c.size, 0);
-              const support = video.clusters.filter(c => c.stance === "support").reduce((sum, c) => sum + c.size, 0);
-              const skeptic = video.clusters.filter(c => c.stance === "skeptic").reduce((sum, c) => sum + c.size, 0);
-              const neutral = video.clusters.filter(c => c.stance === "neutral" || !c.stance).reduce((sum, c) => sum + c.size, 0);
+            {/* Bar Chart */}
+            <div style={{ display: "flex", height: 24, borderRadius: 12, overflow: "hidden", background: "#f1f5f9" }}>
+              {(() => {
+                const total = video.clusters.reduce((sum, c) => sum + c.size, 0);
+                const support = video.clusters.filter(c => c.stance === "support").reduce((sum, c) => sum + c.size, 0);
+                const skeptic = video.clusters.filter(c => c.stance === "skeptic").reduce((sum, c) => sum + c.size, 0);
+                const neutral = video.clusters.filter(c => c.stance === "neutral" || !c.stance).reduce((sum, c) => sum + c.size, 0);
 
-              if (total === 0) return null;
+                if (total === 0) return null;
 
-              return (
-                <>
-                  {support > 0 && (
-                    <div style={{ width: `${(support / total) * 100}%`, background: STANCE_COLORS.support }} title={`肯定的: ${support}件`} />
-                  )}
-                  {neutral > 0 && (
-                    <div style={{ width: `${(neutral / total) * 100}%`, background: STANCE_COLORS.neutral }} title={`中立/その他: ${neutral}件`} />
-                  )}
-                  {skeptic > 0 && (
-                    <div style={{ width: `${(skeptic / total) * 100}%`, background: STANCE_COLORS.skeptic }} title={`懐疑的: ${skeptic}件`} />
-                  )}
-                </>
-              );
-            })()}
+                return (
+                  <>
+                    {support > 0 && (
+                      <div style={{ width: `${(support / total) * 100}%`, background: STANCE_COLORS.support }} title={`肯定的: ${support}件`} />
+                    )}
+                    {neutral > 0 && (
+                      <div style={{ width: `${(neutral / total) * 100}%`, background: STANCE_COLORS.neutral }} title={`中立/その他: ${neutral}件`} />
+                    )}
+                    {skeptic > 0 && (
+                      <div style={{ width: `${(skeptic / total) * 100}%`, background: STANCE_COLORS.skeptic }} title={`懐疑的: ${skeptic}件`} />
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Legend */}
+            <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 13, color: "#475569", justifyContent: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: STANCE_COLORS.support }}></div>
+                肯定的
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: STANCE_COLORS.neutral }}></div>
+                中立・情報共有
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: STANCE_COLORS.skeptic }}></div>
+                懐疑的・批判的
+              </div>
+            </div>
           </div>
-
-          {/* Legend */}
-          <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 13, color: "#475569", justifyContent: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: STANCE_COLORS.support }}></div>
-              肯定的
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: STANCE_COLORS.neutral }}></div>
-              中立・情報共有
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: STANCE_COLORS.skeptic }}></div>
-              懐疑的・批判的
-            </div>
-          </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Map Section */}
       <div className="card" style={{ marginTop: 16 }}>
@@ -457,60 +497,62 @@ export default function VideoPage() {
       </div>
 
       {/* Tooltip with edge detection */}
-      {hoveredCluster && (
-        <div
-          style={(() => {
-            const tooltipWidth = 280;
-            const tooltipHeight = 120;
-            const margin = 16;
-            const windowWidth = typeof window !== 'undefined' ? window.innerWidth : 1000;
-            const windowHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+      {
+        hoveredCluster && (
+          <div
+            style={(() => {
+              const tooltipWidth = 280;
+              const tooltipHeight = 120;
+              const margin = 16;
+              const windowWidth = typeof window !== 'undefined' ? window.innerWidth : 1000;
+              const windowHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
 
-            // Calculate position with edge detection
-            let left = mousePos.x + margin;
-            let top = mousePos.y + margin;
+              // Calculate position with edge detection
+              let left = mousePos.x + margin;
+              let top = mousePos.y + margin;
 
-            // Flip horizontally if too close to right edge
-            if (mousePos.x + tooltipWidth + margin > windowWidth) {
-              left = mousePos.x - tooltipWidth - margin;
-            }
+              // Flip horizontally if too close to right edge
+              if (mousePos.x + tooltipWidth + margin > windowWidth) {
+                left = mousePos.x - tooltipWidth - margin;
+              }
 
-            // Flip vertically if too close to bottom edge
-            if (mousePos.y + tooltipHeight + margin > windowHeight) {
-              top = mousePos.y - tooltipHeight - margin;
-            }
+              // Flip vertically if too close to bottom edge
+              if (mousePos.y + tooltipHeight + margin > windowHeight) {
+                top = mousePos.y - tooltipHeight - margin;
+              }
 
-            // Ensure minimum boundaries
-            left = Math.max(8, left);
-            top = Math.max(8, top);
+              // Ensure minimum boundaries
+              left = Math.max(8, left);
+              top = Math.max(8, top);
 
-            return {
-              position: "fixed" as const,
-              left,
-              top,
-              background: "#1e293b",
-              color: "#fff",
-              padding: "12px 16px",
-              borderRadius: 10,
-              maxWidth: tooltipWidth,
-              zIndex: 1000,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-              pointerEvents: "none" as const,
-            };
-          })()}
-        >
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>
-            {hoveredCluster.label}
+              return {
+                position: "fixed" as const,
+                left,
+                top,
+                background: "#1e293b",
+                color: "#fff",
+                padding: "12px 16px",
+                borderRadius: 10,
+                maxWidth: tooltipWidth,
+                zIndex: 1000,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+                pointerEvents: "none" as const,
+              };
+            })()}
+          >
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>
+              {hoveredCluster.label}
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.5, opacity: 0.9 }}>
+              {hoveredCluster.summary || "要約なし"}
+            </div>
+            <div style={{ fontSize: 12, marginTop: 8, opacity: 0.7, display: "flex", gap: 8 }}>
+              <span>💬 {hoveredCluster.size} コメント</span>
+              <span>• {getStanceLabel(hoveredCluster.stance)}</span>
+            </div>
           </div>
-          <div style={{ fontSize: 13, lineHeight: 1.5, opacity: 0.9 }}>
-            {hoveredCluster.summary || "要約なし"}
-          </div>
-          <div style={{ fontSize: 12, marginTop: 8, opacity: 0.7, display: "flex", gap: 8 }}>
-            <span>💬 {hoveredCluster.size} コメント</span>
-            <span>• {getStanceLabel(hoveredCluster.stance)}</span>
-          </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Cluster Cards */}
       <div style={{ marginTop: 20 }}>
@@ -559,6 +601,6 @@ export default function VideoPage() {
           ))}
         </div>
       </div>
-    </div>
+    </div >
   );
 }

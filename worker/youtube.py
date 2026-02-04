@@ -102,3 +102,23 @@ def fetch_video_info(video_id: str, api_key: Optional[str] = None) -> dict:
         "channel": snippet.get("channelTitle", ""),
         "description": snippet.get("description", ""),
     }
+
+
+def fetch_transcript(video_id: str) -> str | None:
+    """
+    Fetch transcript for a video using youtube-transcript-api.
+    Returns combined text or None if unavailable.
+    """
+    from youtube_transcript_api import YouTubeTranscriptApi
+    
+    try:
+        # Try to get Japanese transcript first, then English, then auto-generated
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['ja', 'en'])
+        
+        # Combine text
+        full_text = " ".join([t['text'] for t in transcript_list])
+        return full_text
+        
+    except Exception as e:
+        print(f"[youtube] Transcript unavailable for {video_id}: {e}")
+        return None

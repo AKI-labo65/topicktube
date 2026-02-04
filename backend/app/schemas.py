@@ -36,6 +36,8 @@ class VideoResponse(BaseModel):
     title: Optional[str] = None
     overall_summary: Optional[str] = None
     issue_outline: Optional[str] = None
+    video_summary: Optional[str] = None
+    video_summary_status: str
     status: StatusEnum
     created_at: datetime
     updated_at: datetime

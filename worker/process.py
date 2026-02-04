@@ -28,9 +28,9 @@ from app.db import SessionLocal  # type: ignore  # noqa: E402
 from app.models import Cluster, Comment, StatusEnum, Video  # type: ignore  # noqa: E402
 from app.tasks import set_job_status, set_video_status, store_clustered_results  # type: ignore  # noqa: E402
 
-from .youtube import fetch_comments, fetch_video_info  # noqa: E402
+from .youtube import fetch_comments, fetch_video_info, fetch_transcript  # noqa: E402
 from .clustering import embed_comments, cluster_comments, select_representatives, preprocess_texts  # noqa: E402
-from .summarize import summarize_cluster, summarize_overall, summarize_issue_outline  # noqa: E402
+from .summarize import summarize_cluster, summarize_overall, summarize_issue_outline, summarize_video_content  # noqa: E402
 
 
 def calc_comments_hash(comment_ids: list[str]) -> str:
@@ -73,6 +73,22 @@ def process_video(video_id: int, youtube_url: str):
 
         video_info = fetch_video_info(yt_video_id)
         video_title = video_info["title"]
+
+        # Fetch transcript and generate video summary
+        print(f"[worker] Fetching transcript...")
+        transcript_text = fetch_transcript(yt_video_id)
+        video_summary_status = "unavailable"
+        video_summary = None
+        
+        if transcript_text:
+            print(f"[worker] Generating video summary from transcript...")
+            video_summary = summarize_video_content(transcript_text, title=video_title, description=video_info["description"])
+            video_summary_status = "ok" if video_summary else "failed"
+        else:
+            print(f"[worker] Transcript missing. Generating summary from description...")
+            video_summary = summarize_video_content("", title=video_title, description=video_info["description"])
+            video_summary_status = "ok" if video_summary else "failed"  # Should be 'ok' generally for description
+
         comments_data = fetch_comments(yt_video_id, max_results=100)
 
         print(f"[worker] Fetched {len(comments_data)} comments for '{video_title}'")
@@ -85,6 +101,9 @@ def process_video(video_id: int, youtube_url: str):
         video = db.query(Video).filter(Video.id == video_id).first()
         if video:
             video.title = video_title
+            if video_summary:
+                video.video_summary = video_summary
+            video.video_summary_status = video_summary_status
 
         # === CACHE CHECK ===
         # If hash matches AND we already have complete analysis (clusters + overall_summary), skip
@@ -177,7 +196,7 @@ def process_video(video_id: int, youtube_url: str):
             
             # Generate summaries
             overall_summary = summarize_overall(clusters_data, video_title=video_title)
-            issue_outline = summarize_issue_outline(clusters_data, video_title=video_title)
+            issue_outline = summarize_issue_outline(clusters_data, video_title=video_title, video_summary=video_summary)
             
             # Save to video
             video = db.query(Video).filter(Video.id == video_id).first()

@@ -117,6 +117,8 @@ npm run dev
 # 動画タイトル保存用カラムの追加
 sqlite3 backend/app.db "ALTER TABLE videos ADD COLUMN hash_version TEXT;"
 sqlite3 backend/app.db "ALTER TABLE videos ADD COLUMN overall_summary TEXT;"
+sqlite3 backend/app.db "ALTER TABLE videos ADD COLUMN video_summary_status TEXT DEFAULT 'pending';"
+sqlite3 backend/app.db "ALTER TABLE videos ADD COLUMN video_summary TEXT;"
 sqlite3 backend/app.db "ALTER TABLE videos ADD COLUMN issue_outline TEXT;"
 sqlite3 backend/app.db "ALTER TABLE clusters ADD COLUMN stance TEXT;"
 ```

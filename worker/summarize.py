@@ -178,6 +178,7 @@ def summarize_overall(
 def summarize_issue_outline(
     clusters_data: List[dict],
     video_title: str | None = None,
+    video_summary: str | None = None,
 ) -> str | None:
     """
     Generate a structured issue outline (issues, disputes, agreements, unanswered questions).
@@ -185,6 +186,7 @@ def summarize_issue_outline(
     Args:
         clusters_data: List of dicts with 'label', 'summary', 'size', 'stance' keys
         video_title: Title of the video (optional context)
+        video_summary: Summary of the video content (optional context)
 
     Returns:
         Markdown string with structured issue outline, or None if failed
@@ -204,10 +206,12 @@ def summarize_issue_outline(
     system = (
         "あなたは動画コメントを分析するアナリストです。"
         "コメント群から「主要論点」「何が対立しているか（争点）」「何が合意されているか（合意点）」「未解決の問い」を整理してください。"
+        "動画内容の要約も提供されている場合は、コメントが動画のどの部分に反応しているかも考慮してください。"
     )
 
     user = f"""
 動画タイトル: {video_title or "不明"}
+動画内容の要約: {video_summary or "なし"}
 
 コメントクラスタの分析結果:
 {cluster_info}
@@ -243,4 +247,58 @@ def summarize_issue_outline(
 
     except Exception as e:
         print(f"[summarize] Error generating issue outline: {e}")
+        return None
+
+
+def summarize_video_content(
+    transcript_text: str,
+    title: str = "",
+    description: str = "",
+) -> str | None:
+    """
+    Generate a summary of the video content based on transcript (or description).
+    """
+    if not transcript_text and not description:
+        return None
+
+    client = get_client()
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+    # Access text limit (truncate if too long)
+    # gpt-4o-mini context is large (128k), but let's limit to ~15k chars to be safe and fast
+    limit = 15000
+    context_text = transcript_text[:limit]
+    if len(transcript_text) > limit:
+        context_text += "...(truncated)"
+    
+    system = (
+        "あなたは動画の内容を要約するアシスタントです。"
+        "提供された字幕（または説明文）をもとに、動画で語られている主要な内容、結論、エピソードなどを300文字程度で簡潔にまとめてください。"
+    )
+
+    user = f"""
+動画タイトル: {title}
+説明文: {description[:500]}
+
+字幕データ:
+{context_text}
+
+要約:
+""".strip()
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.3,
+            max_tokens=400,
+        )
+
+        return (resp.choices[0].message.content or "").strip()
+
+    except Exception as e:
+        print(f"[summarize] Error generating video summary: {e}")
         return None
