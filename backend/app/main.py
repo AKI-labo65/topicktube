@@ -1,7 +1,5 @@
 import os
-import sys
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse, parse_qs
 
@@ -12,6 +10,7 @@ from rq import Queue
 from sqlalchemy.orm import Session
 
 from .db import Base, engine, get_db
+from .jobs import process_video_job
 from .models import Cluster, Job, StatusEnum, Video
 from .schemas import (
     AnalyzeRequest,
@@ -21,14 +20,6 @@ from .schemas import (
     JobStatusResponse,
     VideoResponse,
 )
-
-# Make project root importable so backend can import worker module.
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
-
-from worker.process import process_video  # type: ignore  # noqa: E402
-from worker.youtube import fetch_video_info  # type: ignore  # noqa: E402
 
 # Create tables on startup (simple for MVP; use migrations later).
 Base.metadata.create_all(bind=engine)
@@ -95,7 +86,7 @@ def analyze(request: AnalyzeRequest, db: Session = Depends(get_db)):
         existing_video.status = StatusEnum.queued
         db.commit()
 
-    rq_job = queue.enqueue(process_video, existing_video.id, request.url)
+    rq_job = queue.enqueue(process_video_job, existing_video.id, request.url)
 
     job = Job(
         id=rq_job.id,
@@ -123,28 +114,7 @@ def get_video(video_id: int, db: Session = Depends(get_db)):
     video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
-    
-    # Auto-fill title if missing
-    if not video.title and video.youtube_id:
-        try:
-            video_info = fetch_video_info(video.youtube_id)
-            new_title = video_info.get("title")
-            if new_title:
-                # Conditional UPDATE to prevent race conditions
-                # Only update if title is still NULL (another request may have filled it)
-                from sqlalchemy import text
-                db.execute(
-                    text("UPDATE videos SET title = :title WHERE id = :id AND (title IS NULL OR title = '')"),
-                    {"title": new_title, "id": video.id}
-                )
-                db.commit()
-                db.refresh(video)
-        except Exception as e:
-            # Gracefully fail: log but don't fail the request
-            # Frontend will show youtube_id as fallback
-            print(f"[backend] Failed to fetch video title for {video.youtube_id}: {e}")
-            db.rollback()  # Ensure clean state
-    
+
     clusters = [
         ClusterSummary(
             id=c.id,

@@ -28,8 +28,8 @@ services:
   - type: worker
     name: topicktube-worker
     runtime: python
-    rootDir: worker
-    buildCommand: pip install -r requirements.txt
+    rootDir: .
+    buildCommand: pip install -r worker/requirements.txt
     startCommand: python -m worker.process
     envVars:
       - key: DATABASE_URL
