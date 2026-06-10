@@ -6,6 +6,7 @@ import {
   Download,
   ExternalLink,
   GitBranch,
+  ListChecks,
   Lightbulb,
   Loader2,
   MessageSquareText,
@@ -376,9 +377,46 @@ export default function Home() {
               </section>
             </div>
           ) : (
-            <div className="emptyState">
-              <Network size={34} />
-              <p>リンク、本文、コメントを貼ると論点クラスタと示唆を表示します。</p>
+            <div className="startState">
+              <div className="startHero">
+                <div className="startIcon">
+                  <Network size={30} />
+                </div>
+                <div>
+                  <p className="eyebrow">Ready</p>
+                  <h2>コメントの論点構造を見える化</h2>
+                  <p>
+                    YouTubeリンクからコメントを取得し、賛同・疑問・展開・メタ反応を論点マップとして整理します。
+                  </p>
+                </div>
+              </div>
+
+              <div className="previewMap" aria-hidden="true">
+                <div className="previewClaim">中心主張</div>
+                <div className="previewNode support">賛同</div>
+                <div className="previewNode question">疑問</div>
+                <div className="previewNode extension">展開</div>
+                <div className="previewNode meta">メタ</div>
+              </div>
+
+              <div className="startSteps">
+                <div>
+                  <ExternalLink size={18} />
+                  <span>リンク</span>
+                </div>
+                <div>
+                  <Download size={18} />
+                  <span>取得</span>
+                </div>
+                <div>
+                  <ListChecks size={18} />
+                  <span>分析</span>
+                </div>
+                <div>
+                  <Network size={18} />
+                  <span>マップ</span>
+                </div>
+              </div>
             </div>
           )}
         </section>
