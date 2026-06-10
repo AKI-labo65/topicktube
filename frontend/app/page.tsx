@@ -37,6 +37,14 @@ const severityLabels: Record<InsightMap["signals"][number]["severity"], string> 
   high: "高",
 };
 
+const stanceOrder: InsightMap["clusters"][number]["stance"][] = [
+  "support",
+  "oppose",
+  "question",
+  "extension",
+  "meta",
+];
+
 export default function Home() {
   const [url, setUrl] = useState("https://www.youtube.com/watch?v=example");
   const [sourceText, setSourceText] = useState(examples.sourceText);
@@ -53,6 +61,18 @@ export default function Home() {
     () => result?.clusters.reduce((sum, cluster) => sum + cluster.volume, 0) ?? 0,
     [result],
   );
+  const stanceSummary = useMemo(() => {
+    if (!result) return [];
+
+    return stanceOrder
+      .map((stance) => {
+        const volume = result.clusters
+          .filter((cluster) => cluster.stance === stance)
+          .reduce((sum, cluster) => sum + cluster.volume, 0);
+        return { stance, volume };
+      })
+      .filter((item) => item.volume > 0);
+  }, [result]);
 
   async function fetchLink() {
     setIsFetchingLink(true);
@@ -221,6 +241,70 @@ export default function Home() {
                   <span>反応量</span>
                 </div>
               </header>
+
+              <section className="mapPanel">
+                <div className="mapHeader">
+                  <div>
+                    <p className="eyebrow">Comment Map</p>
+                    <h3>論点コメントマップ</h3>
+                  </div>
+                  <div className="stanceLegend">
+                    {stanceSummary.map((item) => (
+                      <span key={item.stance} className={item.stance}>
+                        {stanceLabels[item.stance]} {item.volume}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="commentMap">
+                  <div className="claimNode">
+                    <span>中心主張</span>
+                    <strong>{result.source.coreClaim}</strong>
+                  </div>
+
+                  <div className="mapNodes">
+                    {result.clusters.map((cluster, index) => {
+                      const share = totalVolume > 0 ? cluster.volume / totalVolume : 0;
+                      const size = Math.max(118, Math.min(210, 118 + share * 260));
+                      const offset = index % 2 === 0 ? "mapNode upper" : "mapNode lower";
+
+                      return (
+                        <article
+                          key={cluster.id}
+                          className={`${offset} ${cluster.stance}`}
+                          style={{ "--node-size": `${size}px` } as React.CSSProperties}
+                        >
+                          <div>
+                            <span>{stanceLabels[cluster.stance]}</span>
+                            <strong>{cluster.volume}</strong>
+                          </div>
+                          <h4>{cluster.label}</h4>
+                          <p>{cluster.summary}</p>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="commentMatrix">
+                  {result.clusters.map((cluster) => (
+                    <article key={cluster.id} className={`matrixRow ${cluster.stance}`}>
+                      <div className="matrixMeta">
+                        <span>{stanceLabels[cluster.stance]}</span>
+                        <strong>{cluster.label}</strong>
+                        <small>{cluster.volume}件</small>
+                      </div>
+                      <p>{cluster.implication}</p>
+                      <div className="matrixComments">
+                        {cluster.representativeComments.slice(0, 3).map((comment) => (
+                          <span key={comment}>{comment}</span>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
 
               <div className="clusterGrid">
                 {result.clusters.map((cluster) => (
