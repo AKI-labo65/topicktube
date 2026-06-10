@@ -4,6 +4,7 @@ export type ResolvedSource = {
   sourceText: string;
   comments: string[];
   commentCount: number;
+  fetchedAllComments: boolean;
   fetchedAt: string;
 };
 

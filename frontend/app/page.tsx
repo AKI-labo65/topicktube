@@ -42,6 +42,7 @@ export default function Home() {
   const [sourceText, setSourceText] = useState(examples.sourceText);
   const [comments, setComments] = useState(examples.comments);
   const [maxComments, setMaxComments] = useState(80);
+  const [fetchAllComments, setFetchAllComments] = useState(true);
   const [resolvedSource, setResolvedSource] = useState<ResolvedSource | null>(null);
   const [result, setResult] = useState<InsightMap | null>(null);
   const [error, setError] = useState("");
@@ -62,7 +63,7 @@ export default function Home() {
       const response = await fetch("/api/resolve-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, maxComments }),
+        body: JSON.stringify({ url, maxComments, fetchAllComments }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "リンクの取得に失敗しました。");
@@ -70,7 +71,11 @@ export default function Home() {
       const resolved = data as ResolvedSource;
       setResolvedSource(resolved);
       setSourceText(resolved.sourceText);
-      setComments(resolved.comments.join("\n"));
+      setComments(
+        resolved.comments
+          .map((comment, index) => `[C${index + 1}] ${comment.replace(/\s+/g, " ").trim()}`)
+          .join("\n"),
+      );
       setResult(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "リンクの取得に失敗しました。");
@@ -88,7 +93,12 @@ export default function Home() {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, sourceText, comments }),
+        body: JSON.stringify({
+          url,
+          sourceText,
+          comments,
+          commentsList: resolvedSource?.comments,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "分析に失敗しました。");
@@ -135,6 +145,7 @@ export default function Home() {
                   min="1"
                   max="300"
                   value={maxComments}
+                  disabled={fetchAllComments}
                   onChange={(event) => setMaxComments(Number(event.target.value))}
                 />
               </label>
@@ -144,11 +155,21 @@ export default function Home() {
               </button>
             </div>
 
+            <label className="checkControl">
+              <input
+                type="checkbox"
+                checked={fetchAllComments}
+                onChange={(event) => setFetchAllComments(event.target.checked)}
+              />
+              <span>YouTubeコメントを毎回全件取得</span>
+            </label>
+
             {resolvedSource ? (
               <div className="sourceStatus">
                 <strong>{resolvedSource.title}</strong>
                 <span>
                   {resolvedSource.platform} から {resolvedSource.commentCount} 件取得
+                  {resolvedSource.fetchedAllComments ? " / 全件" : ""}
                 </span>
               </div>
             ) : null}

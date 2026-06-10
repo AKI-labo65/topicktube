@@ -75,7 +75,7 @@ async function fetchYouTubeJson<T>(path: string, params: Record<string, string>)
   return data;
 }
 
-async function resolveYouTube(url: string, maxComments: number): Promise<ResolvedSource> {
+async function resolveYouTube(url: string, maxComments: number | null): Promise<ResolvedSource> {
   const videoId = getYouTubeVideoId(url);
   const apiKey = process.env.YOUTUBE_API_KEY;
 
@@ -101,8 +101,8 @@ async function resolveYouTube(url: string, maxComments: number): Promise<Resolve
   const comments: string[] = [];
   let pageToken = "";
 
-  while (comments.length < maxComments) {
-    const batchSize = Math.min(100, maxComments - comments.length);
+  while (maxComments === null || comments.length < maxComments) {
+    const batchSize = maxComments === null ? 100 : Math.min(100, maxComments - comments.length);
     const commentData = await fetchYouTubeJson<YouTubeCommentsResponse>("commentThreads", {
       key: apiKey,
       videoId,
@@ -149,6 +149,7 @@ async function resolveYouTube(url: string, maxComments: number): Promise<Resolve
     sourceText,
     comments,
     commentCount: comments.length,
+    fetchedAllComments: maxComments === null,
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -157,6 +158,7 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     url?: string;
     maxComments?: number;
+    fetchAllComments?: boolean;
   };
   const url = body.url?.trim() ?? "";
 
@@ -165,7 +167,7 @@ export async function POST(request: Request) {
   }
 
   const platform = detectSourcePlatform(url);
-  const maxComments = toPositiveInteger(body.maxComments, 80, 300);
+  const maxComments = body.fetchAllComments ? null : toPositiveInteger(body.maxComments, 80, 300);
 
   try {
     if (platform === "YouTube") {

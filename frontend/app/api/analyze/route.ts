@@ -95,11 +95,29 @@ function countCommentLines(comments: string | undefined): number {
     .filter(Boolean).length;
 }
 
+function normalizeCommentText(comment: string): string {
+  return comment.replace(/\s+/g, " ").trim();
+}
+
+function getCommentItems(comments: string | undefined, commentsList: string[] | undefined) {
+  if (commentsList?.length) {
+    return commentsList.map(normalizeCommentText).filter(Boolean);
+  }
+
+  if (!comments) return [];
+
+  return comments
+    .split(/\r?\n/)
+    .map(normalizeCommentText)
+    .filter(Boolean);
+}
+
 export async function POST(request: Request) {
   const body = (await request.json()) as {
     url?: string;
     sourceText?: string;
     comments?: string;
+    commentsList?: string[];
   };
 
   if (!body.url && !body.sourceText && !body.comments) {
@@ -130,7 +148,11 @@ export async function POST(request: Request) {
     "signals": [{"label":"string","detail":"string","severity":"low|medium|high"}],
     "nextQuestions": ["string"]
   }`;
-  const commentLineCount = countCommentLines(body.comments);
+  const commentItems = getCommentItems(body.comments, body.commentsList);
+  const commentLineCount = body.commentsList?.length ?? countCommentLines(body.comments);
+  const numberedComments = commentItems
+    .map((comment, index) => `[C${index + 1}] ${comment}`)
+    .join("\n");
 
   try {
     const completion = await client.chat.completions.create({
@@ -145,7 +167,8 @@ export async function POST(request: Request) {
             "JSONキー名と enum 値以外のすべての文字列値は、必ず自然な日本語で書いてください。英語の label、summary、title、coreClaim、implication、axis、sideA、sideB、whyItMatters、detail、nextQuestions は禁止です。",
             "コメントが少ない場合でも反応量を推定で水増ししないでください。",
             "clusters[].volume は、そのクラスタに実際に対応する入力コメントの件数です。分類不能なら representativeComments.length と同じ数にしてください。",
-            "representativeComments には入力コメントを短くそのまま引用し、入力にないコメントを作らないでください。",
+            "representativeComments には必ず [C1] のようなコメントIDを含め、入力コメントを短くそのまま引用してください。入力にないコメントを作らないでください。",
+            "コメントIDの境界を守ってください。コメント本文中の改行や句読点を別コメントとして数えないでください。",
             "断定できないことは signals に不確実性として入れてください。",
           ].join(" "),
         },
@@ -158,14 +181,15 @@ export async function POST(request: Request) {
             "出力ルール:",
             "- platform と stance と severity の enum 以外はすべて日本語。",
             "- 入力コメント数が少ないときは、各コメントを無理に大きな世論として扱わない。",
-            `- 入力コメントの行数は ${commentLineCount} 件。clusters[].volume の合計は、この件数を超えない。`,
-            "- representativeComments は必ず下のコメント欄にある文だけを使う。",
+            `- 入力コメント数は ${commentLineCount} 件。clusters[].volume の合計は、この件数を超えない。`,
+            "- representativeComments は必ず下の番号付きコメント欄にある文だけを使い、対応するコメントIDを残す。",
+            "- 論点が薄いミーム、定型句、感想、歌詞引用は無理に社会的示唆へ拡大せず、meta または support として扱う。",
             "",
             `URL:\n${body.url ?? ""}`,
             "",
             `投稿/動画本文:\n${body.sourceText ?? ""}`,
             "",
-            `コメント/リプライ/引用:\n${body.comments ?? ""}`,
+            `番号付きコメント/リプライ/引用:\n${numberedComments || body.comments || ""}`,
           ].join("\n"),
         },
       ],
