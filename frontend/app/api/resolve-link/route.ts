@@ -23,8 +23,10 @@ type YouTubeVideoResponse = {
 type YouTubeCommentsResponse = {
   nextPageToken?: string;
   items?: Array<{
+    id?: string;
     snippet?: {
       topLevelComment?: {
+        id?: string;
         snippet?: {
           textDisplay?: string;
           textOriginal?: string;
@@ -34,6 +36,24 @@ type YouTubeCommentsResponse = {
         };
       };
       totalReplyCount?: number;
+    };
+  }>;
+  error?: {
+    message?: string;
+  };
+};
+
+type YouTubeReplyCommentsResponse = {
+  nextPageToken?: string;
+  items?: Array<{
+    id?: string;
+    snippet?: {
+      textDisplay?: string;
+      textOriginal?: string;
+      authorDisplayName?: string;
+      likeCount?: number;
+      publishedAt?: string;
+      parentId?: string;
     };
   }>;
   error?: {
@@ -75,6 +95,56 @@ async function fetchYouTubeJson<T>(path: string, params: Record<string, string>)
   return data;
 }
 
+function pushComment(
+  comments: string[],
+  seenCommentIds: Set<string>,
+  id: string | undefined,
+  text: string,
+  maxComments: number | null,
+) {
+  if (maxComments !== null && comments.length >= maxComments) return;
+  if (id && seenCommentIds.has(id)) return;
+
+  const decodedText = decodeHtml(text);
+  if (!decodedText) return;
+
+  if (id) seenCommentIds.add(id);
+  comments.push(decodedText);
+}
+
+async function fetchYouTubeReplies(
+  apiKey: string,
+  parentId: string,
+  comments: string[],
+  seenCommentIds: Set<string>,
+  maxComments: number | null,
+) {
+  let pageToken = "";
+
+  while (maxComments === null || comments.length < maxComments) {
+    const batchSize = maxComments === null ? 100 : Math.min(100, maxComments - comments.length);
+    const replyData = await fetchYouTubeJson<YouTubeReplyCommentsResponse>("comments", {
+      key: apiKey,
+      parentId,
+      part: "snippet",
+      textFormat: "plainText",
+      maxResults: String(batchSize),
+      ...(pageToken ? { pageToken } : {}),
+    });
+
+    const replies = replyData.items ?? [];
+
+    for (const reply of replies) {
+      const snippet = reply.snippet;
+      const text = snippet?.textOriginal || snippet?.textDisplay || "";
+      pushComment(comments, seenCommentIds, reply.id, text, maxComments);
+    }
+
+    if (!replyData.nextPageToken || replies.length === 0) break;
+    pageToken = replyData.nextPageToken;
+  }
+}
+
 async function resolveYouTube(url: string, maxComments: number | null): Promise<ResolvedSource> {
   const videoId = getYouTubeVideoId(url);
   const apiKey = process.env.YOUTUBE_API_KEY;
@@ -99,6 +169,7 @@ async function resolveYouTube(url: string, maxComments: number | null): Promise<
   }
 
   const comments: string[] = [];
+  const seenCommentIds = new Set<string>();
   let pageToken = "";
 
   while (maxComments === null || comments.length < maxComments) {
@@ -107,24 +178,30 @@ async function resolveYouTube(url: string, maxComments: number | null): Promise<
       key: apiKey,
       videoId,
       part: "snippet",
-      order: "relevance",
+      order: maxComments === null ? "time" : "relevance",
       textFormat: "plainText",
       maxResults: String(batchSize),
       ...(pageToken ? { pageToken } : {}),
     });
 
-    const batch =
-      commentData.items
-        ?.map((comment) => {
-          const snippet = comment.snippet?.topLevelComment?.snippet;
-          const text = snippet?.textOriginal || snippet?.textDisplay || "";
-          return decodeHtml(text);
-        })
-        .filter(Boolean) ?? [];
+    const threads = commentData.items ?? [];
 
-    comments.push(...batch);
+    for (const comment of threads) {
+      const topLevelComment = comment.snippet?.topLevelComment;
+      const snippet = topLevelComment?.snippet;
+      const text = snippet?.textOriginal || snippet?.textDisplay || "";
+      pushComment(comments, seenCommentIds, topLevelComment?.id ?? comment.id, text, maxComments);
 
-    if (!commentData.nextPageToken || batch.length === 0) break;
+      if (
+        topLevelComment?.id &&
+        Number(comment.snippet?.totalReplyCount ?? 0) > 0 &&
+        (maxComments === null || comments.length < maxComments)
+      ) {
+        await fetchYouTubeReplies(apiKey, topLevelComment.id, comments, seenCommentIds, maxComments);
+      }
+    }
+
+    if (!commentData.nextPageToken || threads.length === 0) break;
     pageToken = commentData.nextPageToken;
   }
 

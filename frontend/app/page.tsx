@@ -142,12 +142,12 @@ export default function Home() {
           <div className="brandMark"><Network size={20} /></div>
           <div>
             <strong>TopicTube</strong>
-            <span>Comment Intelligence</span>
+            <span>Discussion Workbench</span>
           </div>
         </div>
         <div className="headerStatus">
-          <span><i />YouTube API</span>
-          <span><i />DeepSeek</span>
+          <span><i />Full comments</span>
+          <span><i />DeepSeek JSON</span>
         </div>
       </header>
 
@@ -155,7 +155,8 @@ export default function Home() {
         <aside className="inputPane">
           <div className="panelHeading">
             <p className="eyebrow">New analysis</p>
-            <h1>コメントを分析</h1>
+            <h1>論点を採取する</h1>
+            <p>リンク、本文、コメントをひとつの分析材料として整理します。</p>
           </div>
 
           <form onSubmit={analyze} className="formStack">
@@ -231,7 +232,7 @@ export default function Home() {
               </div>
             </details>
 
-            <button type="submit" className="primaryButton" disabled={isLoading}>
+            <button type="submit" className="primaryButton" disabled={isLoading} aria-busy={isLoading}>
               {isLoading ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
               {isLoading ? "分析中" : "分析を開始"}
             </button>
@@ -333,13 +334,18 @@ export default function Home() {
           ) : (
             <div className="startState">
               <header className="emptyHeader">
-                <div><p className="eyebrow">Analysis workspace</p><h2>新しいコメント分析</h2></div>
+                <div><p className="eyebrow">Analysis workspace</p><h2>コメントの地形を読む</h2></div>
                 <span className="emptyBadge">データ未取得</span>
               </header>
               <div className="previewMap" aria-hidden="true">
-                <div className="previewClaim">中心主張</div>
-                <div className="previewNode support">賛同</div><div className="previewNode question">疑問</div>
-                <div className="previewNode extension">展開</div><div className="previewNode meta">メタ</div>
+                <div className="previewClaim">
+                  <span>source</span>
+                  <strong>中心主張</strong>
+                </div>
+                <div className="previewNode support"><span>01</span>賛同</div>
+                <div className="previewNode question"><span>02</span>疑問</div>
+                <div className="previewNode extension"><span>03</span>展開</div>
+                <div className="previewNode meta"><span>04</span>メタ</div>
               </div>
               <div className="emptyStats"><div><span>コメント</span><strong>0</strong></div><div><span>論点</span><strong>0</strong></div><div><span>シグナル</span><strong>0</strong></div></div>
             </div>

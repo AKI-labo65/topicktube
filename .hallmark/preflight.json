@@ -1,0 +1,10 @@
+{
+  "scannedAt": "2026-07-27T18:09:50+09:00",
+  "framework": "Next.js 15 app router",
+  "fontStack": "CSS system sans stack",
+  "palette": "CSS custom properties in frontend/app/styles.css",
+  "motion": "motion-cut; no motion library detected",
+  "spacing": "CSS custom properties and 4px-derived values",
+  "preserve": ["route structure", "React state ownership", "API contracts"],
+  "introduce": ["Hallmark CSS stamp", "locked visual tokens", "stronger interaction states", "mobile overflow guards"]
+}

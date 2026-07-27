@@ -109,20 +109,22 @@ function countCommentLines(comments: string | undefined): number {
     .filter(Boolean).length;
 }
 
-function normalizeCommentText(comment: string): string {
-  return comment.replace(/\s+/g, " ").trim();
+function normalizeCommentText(comment: string, maxChars: number): string {
+  const normalized = comment.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars)}...`;
 }
 
-function getCommentItems(comments: string | undefined, commentsList: string[] | undefined) {
+function getCommentItems(comments: string | undefined, commentsList: string[] | undefined, maxCommentChars: number) {
   if (commentsList?.length) {
-    return commentsList.map(normalizeCommentText).filter(Boolean);
+    return commentsList.map((comment) => normalizeCommentText(comment, maxCommentChars)).filter(Boolean);
   }
 
   if (!comments) return [];
 
   return comments
     .split(/\r?\n/)
-    .map(normalizeCommentText)
+    .map((comment) => normalizeCommentText(comment, maxCommentChars))
     .filter(Boolean);
 }
 
@@ -150,6 +152,41 @@ function toPositiveEnvInteger(value: string | undefined, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isRetryableDeepSeekError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /empty response|invalid json|unterminated|unexpected end|timeout|timedout|etimedout|econnreset|temporar|overload|rate limit|5\d\d/i.test(
+    message,
+  );
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(concurrency, 1), items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+      }
+    }),
+  );
+
+  return results;
+}
+
 function getSchemaHint() {
   return `{
     "source": {"platform":"X|YouTube|Unknown","title":"string","coreClaim":"string"},
@@ -164,10 +201,12 @@ function getBaseSystemPrompt() {
   return [
     "あなたはSNS/動画コメントの論点分析に強いリサーチアナリストです。",
     "入力から、論点クラスタ、示唆、対立軸、次に検証すべき問いを抽出してください。",
+    "出力は必ず有効な json object のみで、説明文やMarkdownを混ぜないでください。",
     "JSONキー名と enum 値以外のすべての文字列値は、必ず自然な日本語で書いてください。英語の label、summary、title、coreClaim、implication、axis、sideA、sideB、whyItMatters、detail、nextQuestions は禁止です。",
     "コメントが少ない場合でも反応量を推定で水増ししないでください。",
     "clusters[].volume は、そのクラスタに実際に対応する入力コメントの件数です。分類不能なら representativeComments.length と同じ数にしてください。",
     "representativeComments には必ず [C1] のようなコメントIDを含め、入力コメントを短くそのまま引用してください。入力にないコメントを作らないでください。",
+    "representativeComments は各クラスタ最大3件、1件120文字以内にしてください。",
     "コメントIDの境界を守ってください。コメント本文中の改行や句読点を別コメントとして数えないでください。",
     "論点が薄いミーム、定型句、感想、歌詞引用は無理に社会的示唆へ拡大せず、meta または support として扱ってください。",
     "断定できないことは signals に不確実性として入れてください。",
@@ -175,17 +214,44 @@ function getBaseSystemPrompt() {
 }
 
 async function createJsonCompletion<T>(client: OpenAI, messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]) {
-  const completion = await client.chat.completions.create({
-    model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
-    response_format: { type: "json_object" },
-    messages,
-    temperature: 0.2,
-  });
-  const content = completion.choices[0]?.message.content;
+  const maxAttempts = toPositiveEnvInteger(process.env.DEEPSEEK_COMPLETION_ATTEMPTS, 2);
+  let lastError: unknown;
 
-  if (!content) throw new Error("DeepSeek returned an empty response.");
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const completion = await client.chat.completions.create({
+        model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
+        response_format: { type: "json_object" },
+        messages,
+        temperature: 0.2,
+        max_tokens: toPositiveEnvInteger(process.env.DEEPSEEK_MAX_TOKENS, 5000),
+        thinking: {
+          type: process.env.DEEPSEEK_THINKING ?? "disabled",
+        },
+      } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
+        thinking: { type: string };
+      });
+      const choice = completion.choices[0];
+      const content = choice?.message.content;
 
-  return extractJson<T>(content);
+      if (!content?.trim()) {
+        throw new Error(`DeepSeek returned an empty response${choice?.finish_reason ? ` (${choice.finish_reason})` : ""}.`);
+      }
+
+      try {
+        return extractJson<T>(content);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown parse error";
+        throw new Error(`DeepSeek returned invalid JSON: ${message}`);
+      }
+    } catch (error) {
+      lastError = error;
+      if (attempt >= maxAttempts || !isRetryableDeepSeekError(error)) throw error;
+      await wait(800 * attempt);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("DeepSeek request failed.");
 }
 
 async function analyzeDirectly({
@@ -216,6 +282,7 @@ async function analyzeDirectly({
         "- platform と stance と severity の enum 以外はすべて日本語。",
         "- 入力コメント数が少ないときは、各コメントを無理に大きな世論として扱わない。",
         `- 入力コメント数は ${commentCount} 件。clusters[].volume の合計は、この件数を超えない。`,
+        "- clusters は最大6個。tensions、signals、nextQuestions は最大4個ずつ。",
         "- representativeComments は必ず下の番号付きコメント欄にある文だけを使い、対応するコメントIDを残す。",
         "",
         `URL:\n${url}`,
@@ -267,6 +334,7 @@ async function analyzeChunk({
         "出力ルール:",
         `- chunkId は "chunk-${chunkIndex + 1}"。commentRange は "${firstId}-${lastId}"。`,
         `- このチャンクのコメント数は ${chunk.length} 件。clusters[].volume の合計はこの件数を超えない。`,
+        "- clusters は最大6個。tensions、signals、nextQuestions は最大4個ずつ。",
         "- 代表コメントには必ずコメントIDを残す。",
         "- 後段で統合するため、似た論点でもラベルと要約は具体的に書く。",
         "",
@@ -307,7 +375,7 @@ async function integrateChunkInsights({
         "- 似たクラスタを統合し、全体で3〜8個程度の主要クラスタにまとめる。",
         `- 全コメント数は ${totalCommentCount} 件。clusters[].volume の合計はこの件数を超えない。`,
         "- 各クラスタのvolumeは統合元チャンクの件数を足し合わせる。ただし同じコメントIDを重複カウントしない。",
-        "- representativeComments はチャンク分析に含まれるコメントID付き引用だけから選ぶ。",
+        "- representativeComments はチャンク分析に含まれるコメントID付き引用だけから選ぶ。各クラスタ最大3件。",
         "- 一部チャンクだけの局所的な反応と、全体で強い反応を区別する。",
         "- シグナルには、コメント全体から見た不確実性、偏り、取得条件の注意点を入れる。",
         "",
@@ -348,12 +416,16 @@ export async function POST(request: Request) {
   const client = new OpenAI({
     apiKey,
     baseURL: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
+    timeout: toPositiveEnvInteger(process.env.DEEPSEEK_TIMEOUT_MS, 120000),
+    maxRetries: toPositiveEnvInteger(process.env.DEEPSEEK_SDK_RETRIES, 1),
   });
 
-  const commentItems = getCommentItems(body.comments, body.commentsList);
+  const maxCommentChars = toPositiveEnvInteger(process.env.ANALYZE_MAX_COMMENT_CHARS, 700);
+  const commentItems = getCommentItems(body.comments, body.commentsList, maxCommentChars);
   const numberedComments = toNumberedComments(commentItems);
-  const directAnalysisLimit = toPositiveEnvInteger(process.env.ANALYZE_DIRECT_COMMENT_LIMIT, 120);
-  const chunkSize = toPositiveEnvInteger(process.env.ANALYZE_CHUNK_SIZE, 120);
+  const directAnalysisLimit = toPositiveEnvInteger(process.env.ANALYZE_DIRECT_COMMENT_LIMIT, 40);
+  const chunkSize = toPositiveEnvInteger(process.env.ANALYZE_CHUNK_SIZE, 40);
+  const chunkConcurrency = toPositiveEnvInteger(process.env.ANALYZE_CHUNK_CONCURRENCY, 3);
 
   try {
     if (numberedComments.length <= directAnalysisLimit) {
@@ -368,19 +440,15 @@ export async function POST(request: Request) {
     }
 
     const commentChunks = chunkArray(numberedComments, chunkSize);
-    const chunkInsights: ChunkInsight[] = [];
-
-    for (let index = 0; index < commentChunks.length; index += 1) {
-      chunkInsights.push(
-        await analyzeChunk({
-          client,
-          chunk: commentChunks[index],
-          chunkIndex: index,
-          totalChunks: commentChunks.length,
-          sourceText: body.sourceText ?? "",
-        }),
-      );
-    }
+    const chunkInsights = await mapWithConcurrency(commentChunks, chunkConcurrency, (chunk, index) =>
+      analyzeChunk({
+        client,
+        chunk,
+        chunkIndex: index,
+        totalChunks: commentChunks.length,
+        sourceText: body.sourceText ?? "",
+      }),
+    );
 
     return NextResponse.json(
       await integrateChunkInsights({
